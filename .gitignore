@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# model-inspect：本地配置（含密钥）与运行产物不入库
+config.json
+data/
+report.html

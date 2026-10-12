@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>model-inspect 模型体检报告</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10); --wash: rgba(11,11,11,.04);
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --good: #0ca30c; --warn: #fab219; --crit: #d03b3b; --bar: #86b6ef;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10); --wash: rgba(255,255,255,.05);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --bar: #1c5cab;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+main { max-width: 1280px; margin: 0 auto; padding: 24px 20px 60px; }
+h1 { font-size: 22px; margin: 0 0 2px; }
+h2 { font-size: 16px; margin: 0 0 4px; }
+.sub { color: var(--ink2); margin: 0 0 16px; }
+.hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-top: 16px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.filters label { color: var(--ink2); }
+select, button, input[type=text] { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; }
+button { cursor: pointer; }
+button:hover { background: var(--wash); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--axis); cursor: pointer; user-select: none; background: var(--surface); }
+.chip.off { opacity: .45; }
+.chip i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--ink2); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--surface); }
+th:first-child, td:first-child { text-align: left; }
+td.l, th.l { text-align: left; }
+tbody tr:hover { background: var(--wash); }
+.big { font-weight: 700; font-size: 16px; }
+.mini { display: block; height: 3px; border-radius: 2px; background: var(--bar); margin-top: 2px; margin-left: auto; }
+.st { display: inline-flex; align-items: center; gap: 4px; }
+.st b { font-weight: 700; }
+.good b { color: var(--good); } .warn b { color: var(--warn); } .crit b { color: var(--crit); } .none b { color: var(--muted); }
+.key { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+#chart { position: relative; }
+#chart svg { display: block; width: 100%; height: 340px; }
+#tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15); font-size: 12px; display: none; min-width: 150px; z-index: 5; }
+#tip .t { color: var(--ink2); margin-bottom: 4px; }
+#tip .r { display: flex; align-items: center; gap: 6px; }
+#tip .r b { min-width: 34px; }
+#tip .r span { color: var(--ink2); }
+.matrix td, .matrix th { padding: 3px 6px; text-align: center; }
+.matrix td.l, .matrix th.l { text-align: left; }
+.matrix td.l { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.matrix tr.cat td { background: var(--wash); font-weight: 600; text-align: left; }
+.cell { cursor: pointer; font-weight: 700; border-radius: 4px; }
+.cell:hover, .cell:focus { outline: 2px solid var(--axis); }
+.cell.ok { color: var(--good); } .cell.no { color: var(--crit); } .cell.er { color: var(--warn); }
+.cell small { display: block; font-weight: 400; color: var(--muted); font-size: 10px; }
+#detail { display: none; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; }
+#detail pre { white-space: pre-wrap; word-break: break-word; background: var(--wash); padding: 10px; border-radius: 6px; max-height: 320px; overflow: auto; margin: 6px 0; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.empty { color: var(--muted); padding: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>model-inspect 模型体检报告</h1>
+  <p class="sub" id="meta"></p>
+
+  <div class="card filters">
+    <label>时间范围 <select id="range">
+      <option value="0">全部</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option>
+    </select></label>
+    <label>指标 <select id="metric"></select></label>
+    <label>题库 <select id="suite"></select></label>
+    <button id="all">全选</button><button id="none">全不选</button>
+    <div class="legend" id="legend" style="flex-basis:100%"></div>
+  </div>
+
+  <div class="card">
+    <h2>最新成绩</h2>
+    <p class="hint">每个模型最近一次执行。「对比历史」= 本次得分 − 此前各次的平均分；波动超过抽样误差（约 2 个标准误，最少 5 分）才标记上升/下降。出错或超时的题按答错计，出错超过 10% 标记为不完整。</p>
+    <div class="scroll"><table id="board"></table></div>
+  </div>
+
+  <div class="card">
+    <h2 id="chartTitle">得分趋势</h2>
+    <p class="hint">横轴是执行时间，每个点是一次执行。鼠标移到图上查看该次各模型得分。</p>
+    <div id="chart"><svg id="svg" role="img" aria-label="各模型得分随时间变化的折线图"></svg><div id="tip"></div></div>
+  </div>
+
+  <div class="card">
+    <h2>逐题结果</h2>
+    <p class="hint">每格是该模型最近一次的结果（✓ 对 / ✗ 错 / ! 出错），下面的小字是所选时间范围内的历史通过次数。点击格子查看题目与模型原始回答。
+      <label><input type="checkbox" id="onlyWrong"> 只看有模型答错的题</label></p>
+    <div class="scroll" style="max-height:560px"><table class="matrix" id="matrix"></table></div>
+    <div id="detail"></div>
+  </div>
+
+  <div class="card">
+    <h2>执行记录</h2>
+    <p class="hint">最近 300 次，新的在前。</p>
+    <div class="scroll" style="max-height:480px"><table id="history"></table></div>
+  </div>
+</main>
+
+<script id="data" type="application/json">/*DATA*/null</script>
+<script>
+const D = JSON.parse(document.getElementById("data").textContent) || {runs: [], questions: [], cats: {}, details: {}};
+const $ = (id) => document.getElementById(id);
+const SLOTS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+const NS = "http://www.w3.org/2000/svg";
+
+// 模型名、回答都是外部数据，一律走 textContent
+function el(tag, props, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") node.className = v;
+    else if (k === "style") node.style.cssText = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return node;
+}
+function svg(tag, attrs, text) {
+  const node = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+  if (text != null) node.textContent = text;
+  return node;
+}
+const ts = (r) => new Date(r.started_at.replace(" ", "T")).getTime();
+const fmt = (n, d = 1) => (n == null ? "–" : Number(n).toFixed(d));
+
+// 颜色跟模型走：按首次出现的顺序固定分配，前 8 个有色，其余用灰色
+const names = [...new Set(D.runs.map((r) => r.name))];
+const colorOf = (name) => { const i = names.indexOf(name); return i < 8 ? `var(${SLOTS[i]})` : "var(--muted)"; };
+const state = { on: new Set(names), range: 0, metric: "score", suite: D.suite };
+
+function runsInView() {
+  const cut = state.range ? Date.now() - state.range * 864e5 : 0;
+  return D.runs.filter((r) => r.suite === state.suite && ts(r) >= cut && state.on.has(r.name));
+}
+const valueOf = (r) => (state.metric === "score" ? r.score : r.cat_scores[state.metric]);
+const metricLabel = () => (state.metric === "score" ? "总分" : D.cats[state.metric]);
+
+function status(run, prev) {
+  if (run.n_error / run.n_total > 0.1) return ["warn", "⚠", "不完整"];
+  if (!prev.length) return ["none", "○", "首测"];
+  const base = prev.reduce((s, r) => s + r.score, 0) / prev.length;
+  const p = Math.min(0.98, Math.max(0.02, base / 100));
+  const limit = Math.max(5, 2 * 100 * Math.sqrt(p * (1 - p) / run.n_total * (1 + 1 / prev.length)));
+  const delta = run.score - base;
+  if (delta < -limit) return ["crit", "▼", "下降"];
+  if (delta > limit) return ["good", "▲", "上升"];
+  return ["good", "●", "稳定"];
+}
+
+function renderBoard(view) {
+  const cats = Object.keys(D.cats);
+  const head = el("tr", null, el("th", null, "模型"), el("th", {class: "l"}, "状态"), el("th", null, "总分"), el("th", null, "对比历史"),
+    cats.map((c) => el("th", null, D.cats[c])), el("th", null, "对/总"), el("th", null, "出错"), el("th", null, "均耗时"),
+    el("th", null, "输出 tokens"), el("th", null, "次数"), el("th", null, "最近执行"));
+  const rows = [];
+  for (const name of names.filter((n) => state.on.has(n))) {
+    const mine = view.filter((r) => r.name === name);
+    if (!mine.length) continue;
+    const run = mine[mine.length - 1], prev = mine.slice(0, -1).filter((r) => r.n_error / r.n_total <= 0.1);
+    const [cls, icon, label] = status(run, prev);
+    const base = prev.length ? prev.reduce((s, r) => s + r.score, 0) / prev.length : null;
+    const delta = base == null ? "–" : (run.score - base >= 0 ? "+" : "") + fmt(run.score - base);
+    rows.push([run.score, el("tr", null,
+      el("td", null, el("span", {class: "key", style: `background:${colorOf(name)}`}), name),
+      el("td", {class: "l"}, el("span", {class: "st " + cls}, el("b", null, icon), label)),
+      el("td", {class: "big"}, fmt(run.score)), el("td", null, delta),
+      cats.map((c) => el("td", null, fmt(run.cat_scores[c], 0), el("span", {class: "mini", style: `width:${Math.max(2, run.cat_scores[c] || 0) * 0.4}px`}))),
+      el("td", null, `${run.n_correct}/${run.n_total}`), el("td", null, run.n_error), el("td", null, fmt(run.avg_latency_s) + "s"),
+      el("td", null, run.tokens_out.toLocaleString()), el("td", null, mine.length), el("td", null, run.started_at.slice(0, 16)))]);
+  }
+  rows.sort((a, b) => b[0] - a[0]);
+  $("board").replaceChildren(el("thead", null, head), el("tbody", null, rows.map((r) => r[1])));
+  if (!rows.length) $("board").replaceChildren(el("caption", {class: "empty"}, "所选范围内没有数据"));
+}
+
+function renderChart(view) {
+  const box = $("svg"), W = box.clientWidth || 900, H = 340, m = {l: 40, r: 120, t: 12, b: 28};
+  box.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  box.replaceChildren();
+  $("chartTitle").textContent = metricLabel() + "趋势";
+  const pts = view.map((r) => ({r, t: ts(r), v: valueOf(r)})).filter((p) => p.v != null);
+  if (!pts.length) { box.append(svg("text", {x: W / 2, y: H / 2, "text-anchor": "middle", fill: "var(--muted)"}, "所选范围内没有数据")); return; }
+  let t0 = Math.min(...pts.map((p) => p.t)), t1 = Math.max(...pts.map((p) => p.t));
+  if (t0 === t1) { t0 -= 36e5; t1 += 36e5; }
+  const lo = Math.max(0, Math.floor((Math.min(...pts.map((p) => p.v)) - 5) / 10) * 10);
+  const x = (t) => m.l + (t - t0) / (t1 - t0) * (W - m.l - m.r), y = (v) => m.t + (100 - v) / (100 - lo) * (H - m.t - m.b);
+  for (let v = lo; v <= 100; v += (100 - lo) > 50 ? 20 : 10) {
+    box.append(svg("line", {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1}));
+    box.append(svg("text", {x: m.l - 8, y: y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11}, v));
+  }
+  box.append(svg("line", {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1}));
+  const day = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  for (let i = 0; i <= 4; i++) {
+    const t = t0 + (t1 - t0) * i / 4;
+    box.append(svg("text", {x: x(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle", fill: "var(--muted)", "font-size": 11}, day(t)));
+  }
+  const shown = names.filter((n) => pts.some((p) => p.r.name === n)), ends = [];
+  for (const name of shown) {
+    const mine = pts.filter((p) => p.r.name === name), c = colorOf(name);
+    box.append(svg("polyline", {points: mine.map((p) => `${x(p.t)},${y(p.v)}`).join(" "), fill: "none", stroke: c, "stroke-width": 2, "stroke-linejoin": "round"}));
+    for (const p of mine) box.append(svg("circle", {cx: x(p.t), cy: y(p.v), r: 4, fill: c, stroke: "var(--surface)", "stroke-width": 2}));
+    ends.push({name, y: y(mine[mine.length - 1].v), x: x(mine[mine.length - 1].t)});
+  }
+  if (shown.length <= 4) {                           // 序列少时在线尾直接标名字，并把重叠的标签错开
+    ends.sort((a, b) => a.y - b.y);
+    ends.forEach((e, i) => { if (i && e.y - ends[i - 1].y < 14) e.y = ends[i - 1].y + 14; });
+    for (const e of ends) box.append(svg("text", {x: e.x + 10, y: e.y + 4, fill: "var(--ink2)", "font-size": 12}, e.name.slice(0, 16)));
+  }
+  const hair = svg("line", {y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden"});
+  box.append(hair);
+  const times = [...new Set(pts.map((p) => Math.round(p.t / 6e4)))].sort((a, b) => a - b);   // 同一分钟启动的算同一批
+  const tip = $("tip");
+  box.onpointermove = (ev) => {
+    const rect = box.getBoundingClientRect(), px = (ev.clientX - rect.left) * W / rect.width;
+    const near = times.reduce((a, b) => (Math.abs(x(b * 6e4) - px) < Math.abs(x(a * 6e4) - px) ? b : a));
+    const batch = pts.filter((p) => Math.round(p.t / 6e4) === near).sort((a, b) => b.v - a.v);
+    hair.setAttribute("x1", x(near * 6e4)); hair.setAttribute("x2", x(near * 6e4)); hair.setAttribute("visibility", "visible");
+    tip.replaceChildren(el("div", {class: "t"}, batch[0].r.started_at.slice(0, 16) + " · " + metricLabel()),
+      batch.map((p) => el("div", {class: "r"}, el("span", {class: "key", style: `background:${colorOf(p.r.name)};margin:0`}), el("b", null, fmt(p.v)), el("span", null, p.r.name + (p.r.note ? "（" + p.r.note + "）" : "")))));
+    tip.style.display = "block";
+    const left = x(near * 6e4) * rect.width / W + 14;
+    tip.style.left = (left + tip.offsetWidth > rect.width ? left - tip.offsetWidth - 28 : left) + "px";
+    tip.style.top = "20px";
+  };
+  box.onpointerleave = () => { tip.style.display = "none"; hair.setAttribute("visibility", "hidden"); };
+}
+
+function renderMatrix(view) {
+  const cols = names.filter((n) => view.some((r) => r.name === n));
+  const latest = Object.fromEntries(cols.map((n) => [n, view.filter((r) => r.name === n).pop()]));
+  const body = [];
+  let lastCat = "";
+  D.questions.forEach((q, i) => {
+    const cells = cols.map((n) => {
+      const bit = latest[n].bits[i], hist = view.filter((r) => r.name === n && "01".includes(r.bits[i]));
+      const pass = hist.filter((r) => r.bits[i] === "1").length;
+      const [cls, mark] = bit === "1" ? ["ok", "✓"] : bit === "0" ? ["no", "✗"] : bit === "e" ? ["er", "!"] : ["", "·"];
+      return {bit, node: el("td", null, el("div", {class: "cell " + cls, tabindex: 0, title: `${n}：历史 ${pass}/${hist.length} 次答对`,
+        onclick: () => showDetail(q, latest[n]), onkeydown: (ev) => { if (ev.key === "Enter") showDetail(q, latest[n]); }}, mark, el("small", null, `${pass}/${hist.length}`)))};
+    });
+    if ($("onlyWrong").checked && !cells.some((c) => c.bit === "0" || c.bit === "e")) return;
+    if (q.cat !== lastCat) { lastCat = q.cat; body.push(el("tr", {class: "cat"}, el("td", {colspan: cols.length + 2}, D.cats[q.cat] || q.cat))); }
+    body.push(el("tr", null, el("td", {class: "l"}, q.id), el("td", {class: "l", title: q.q}, q.q.replace(/\s+/g, " ").slice(0, 46)), cells.map((c) => c.node)));
+  });
+  $("matrix").replaceChildren(el("thead", null, el("tr", null, el("th", {class: "l"}, "题目"), el("th", {class: "l"}, "题干"), cols.map((n) => el("th", null, n)))), el("tbody", null, body));
+  if (!cols.length) $("matrix").replaceChildren(el("caption", {class: "empty"}, "所选范围内没有数据"));
+}
+
+function showDetail(q, run) {
+  const a = (D.details[run.id] || {})[q.id] || {};
+  const opts = q.options.length ? "\n\n" + q.options.map((o, i) => "ABCDEFGHIJ"[i] + ". " + o).join("\n") : "";
+  $("detail").style.display = "block";
+  $("detail").replaceChildren(
+    el("b", null, `${q.id} · ${run.name} · ${run.started_at}`), el("div", {class: "hint"}, `来源 ${q.src}`),
+    el("pre", null, q.q + opts),
+    el("div", null, `标准答案：${q.answer}　模型答案：${a.got || "（未取到）"}　耗时：${fmt(a.latency_s)}s`),
+    a.error ? el("pre", null, "错误：" + a.error) : el("pre", null, a.reply || "（没有保存回答）"));
+  $("detail").scrollIntoView({block: "nearest", behavior: "smooth"});
+}
+
+function renderHistory(view) {
+  const head = el("tr", null, ["模型", "时间", "总分", "对/总", "出错", "用时", "均耗时", "输入 tokens", "输出 tokens"].map((h) => el("th", null, h)),
+    el("th", {class: "l"}, "模型 ID / 接口回显"), el("th", {class: "l"}, "备注"));
+  const rows = view.slice(-300).reverse().map((r) => el("tr", null,
+    el("td", null, el("span", {class: "key", style: `background:${colorOf(r.name)}`}), r.name), el("td", null, r.started_at.slice(0, 16)),
+    el("td", null, fmt(r.score)), el("td", null, `${r.n_correct}/${r.n_total}`), el("td", null, r.n_error), el("td", null, fmt(r.duration_s, 0) + "s"),
+    el("td", null, fmt(r.avg_latency_s) + "s"), el("td", null, r.tokens_in.toLocaleString()), el("td", null, r.tokens_out.toLocaleString()),
+    el("td", {class: "l"}, r.model + (r.returned_model && r.returned_model !== r.model ? " → " + r.returned_model : "")), el("td", {class: "l"}, r.note || "")));
+  $("history").replaceChildren(el("thead", null, head), el("tbody", null, rows));
+}
+
+function renderLegend() {
+  $("legend").replaceChildren(...names.map((n) => el("span", {class: "chip" + (state.on.has(n) ? "" : " off"), role: "button", tabindex: 0,
+    onclick: () => { state.on.has(n) ? state.on.delete(n) : state.on.add(n); render(); }}, el("i", {style: `background:${colorOf(n)}`}), n)));
+}
+
+function render() {
+  const view = runsInView();
+  renderLegend(); renderBoard(view); renderChart(view); renderMatrix(view); renderHistory(view);
+}
+
+$("meta").textContent = `题库 ${D.suite} · ${D.questions.length} 题 · ${names.length} 个模型 · 累计 ${D.runs.length} 次执行 · 生成于 ${D.generated_at}`;
+$("metric").replaceChildren(el("option", {value: "score"}, "总分"), ...Object.entries(D.cats).map(([k, v]) => el("option", {value: k}, v)));
+const suites = [...new Set([D.suite, ...D.runs.map((r) => r.suite)])];
+$("suite").replaceChildren(...suites.map((s) => el("option", {value: s}, s)));
+$("range").onchange = (e) => { state.range = +e.target.value; render(); };
+$("metric").onchange = (e) => { state.metric = e.target.value; render(); };
+$("suite").onchange = (e) => { state.suite = e.target.value; render(); };
+$("onlyWrong").onchange = render;
+$("all").onclick = () => { state.on = new Set(names); render(); };
+$("none").onclick = () => { state.on.clear(); render(); };
+window.addEventListener("resize", () => renderChart(runsInView()));
+render();
+</script>
+</body>
+</html>
