@@ -78,7 +78,8 @@ python run.py --base-url https://api.example.com/v1 --api-key secret://model-ins
 | `base_url` | 接口地址，写到 `/v1` 即可，会自动补 `/chat/completions` 或 `/messages` | 必填 |
 | `api_key` | 密钥。整份配置存在 ct secret 里时直接写；放在本地文件时写 `secret://名字` 或 `secret://名字#字段` 引用 | 必填 |
 | `protocol` | `openai` 或 `anthropic`。不写时按地址判断 | 自动 |
-| `concurrency` | 同时发几道题 | 8 |
+| `concurrency` | 同时在途的请求数上限。被限流就调低 | 8 |
+| `rpm` | 每分钟最多发多少个请求，`0` 表示不限。接口有明确的 RPM 配额时填它 | 0 |
 | `timeout` | 单题超时秒数 | 180 |
 | `budget` | 单个模型总预算秒数，超过后剩余题目记为未作答 | 600 |
 | `stream` | 用流式请求。慢的推理模型经中转站时非流式容易 524，可设为 `true` | false |
@@ -86,13 +87,20 @@ python run.py --base-url https://api.example.com/v1 --api-key secret://model-ins
 | `efforts` | 推理强度列表，如 `["low", "high"]`。每档展开成一个独立变体 `name@档位`，OpenAI 协议发 `reasoning_effort`，Anthropic 协议发 `output_config.effort` | 不展开 |
 | `params` | 原样并入请求体，如 `{"temperature": 0, "reasoning_effort": "high"}` | `{}` |
 
+### 请求频率控制
+
+- 接口地址和密钥都相同的模型视为同一个账号，**依次执行**、共用一个限速器；不同账号之间并行。所以一个模型配了 5 档 `efforts`，总耗时大约是单档的 5 倍，但每档各自有完整的 `budget`，并发和单独跑时一样，耗时数据可比。
+- 收到 429 时自动降速：按接口返回的 `Retry-After`（没有就从 10 秒起逐次加倍，最长 60 秒）暂停该账号的全部请求，并把并发减半，然后重试。限流不计入失败，降下来的并发会沿用到同账号后面的模型。终端会提示被限流了几次、当前并发是多少。
+- 经常被限流就直接在配置里调低 `concurrency` 或设置 `rpm`，省掉试探的时间。
+- 每题的耗时只统计成功那一次请求，不含排队和限流等待。
+
 对比不同推理强度：
 
 ```json
 {"name": "gpt-6.1-sol", "model": "gpt-6.1-sol", "efforts": ["low", "medium", "high", "xhigh", "max"]}
 ```
 
-会得到 `gpt-6.1-sol@low` … `gpt-6.1-sol@max` 五条曲线，在报告里并排比较得分、耗时和输出 tokens。`python run.py gpt-6.1-sol` 选中全部档位，`python run.py gpt-6.1-sol@high` 只跑一档。各档是并行跑的，档位多时注意接口限流；高档位单题更慢，可能需要调大 `concurrency` 或 `budget`。
+会得到 `gpt-6.1-sol@low` … `gpt-6.1-sol@max` 五条曲线，在报告里并排比较得分、耗时和输出 tokens。`python run.py gpt-6.1-sol` 选中全部档位，`python run.py gpt-6.1-sol@high` 只跑一档。各档依次执行；高档位单题更慢，单档可能超出 `budget`，届时可调大 `budget`。
 
 默认不发送 `temperature` 和 OpenAI 协议的 `max_tokens`，因为不少推理模型会拒绝这些参数；需要时写进 `params`。注意：`params` 不同会影响得分，改了参数建议换一个 `name`，否则曲线前后不可比。
 

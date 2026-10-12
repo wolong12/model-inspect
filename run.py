@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "data" / "results.db"
 SECRET_CONFIG = "secret://model-inspect"
 DEFAULTS = {"protocol": "", "concurrency": 8, "timeout": 180, "budget": 600, "max_tokens": 8192,
-            "stream": False, "params": {}}
+            "rpm": 0, "stream": False, "params": {}}
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
 SYSTEM = "你在参加一次标准化测验。可以先简要推理，但最后必须单独一行按要求的格式给出答案。"
 
@@ -171,8 +171,41 @@ def read_stream(resp):
     return {"model": model, "usage": usage, "content": "".join(text)}
 
 
-def call_model(m, prompt):
-    """发一次请求，返回 (回答文本, 输入 token, 输出 token, 接口回显的模型名)。"""
+class Limiter:
+    """一个账号（接口地址 + 密钥）一个：限制同时在途的请求数和每分钟请求数，遇到 429 自动降速。"""
+
+    def __init__(self, concurrency, rpm):
+        self.limit, self.busy, self.gap = concurrency, 0, 60 / rpm if rpm else 0
+        self.next_at = self.cut_at = 0.0
+        self.hits = 0                                # 被限流的次数
+        self.cv = threading.Condition()
+
+    def __enter__(self):
+        with self.cv:
+            while self.busy >= self.limit:
+                self.cv.wait()
+            self.busy += 1
+            start = max(time.time(), self.next_at)
+            self.next_at = start + self.gap
+        time.sleep(max(0, start - time.time()))
+
+    def __exit__(self, *exc):
+        with self.cv:
+            self.busy -= 1
+            self.cv.notify_all()
+
+    def slow_down(self, wait):
+        """收到 429：所有请求暂停 wait 秒；并发减半（10 秒内只减一次，避免一批 429 把并发直接砍到 1）。"""
+        with self.cv:
+            now = time.time()
+            self.hits += 1
+            self.next_at = max(self.next_at, now + wait)
+            if now - self.cut_at > 10:
+                self.limit, self.cut_at = max(1, self.limit // 2), now
+
+
+def call_model(m, prompt, limiter, deadline):
+    """发一次请求，返回 (回答文本, 输入 token, 输出 token, 接口回显的模型名, 本次请求耗时)。"""
     url = m["base_url"].rstrip("/")
     if is_anthropic(m):
         if not url.endswith("/messages"):
@@ -193,19 +226,33 @@ def call_model(m, prompt):
     body.update(m["params"])                         # 需要 temperature / max_tokens 等就写在 params 里
     headers.update({"Content-Type": "application/json", "User-Agent": "curl/8.5.0"})
     req = urllib.request.Request(url, json.dumps(body).encode(), headers)
-    for attempt in range(3):
+    fails = limited = 0
+    while True:
         try:
-            with urllib.request.urlopen(req, timeout=m["timeout"]) as resp:
-                data = read_stream(resp) if m["stream"] else json.loads(resp.read().decode("utf-8", "replace"))
+            with limiter:
+                t0 = time.time()
+                with urllib.request.urlopen(req, timeout=m["timeout"]) as resp:
+                    data = read_stream(resp) if m["stream"] else json.loads(resp.read().decode("utf-8", "replace"))
+                took = time.time() - t0
             break
         except urllib.error.HTTPError as e:
-            detail = e.read().decode("utf-8", "replace")[:300]
-            if e.code not in (408, 429, 500, 502, 503, 504, 529) or attempt == 2:
-                raise RuntimeError(f"HTTP {e.code}: {detail}") from None
+            detail = f"HTTP {e.code}: " + e.read().decode("utf-8", "replace")[:300]
+            if e.code == 429:                        # 限流不算失败次数：降速后重试，直到预算用完
+                limited += 1
+                after = e.headers.get("Retry-After", "")
+                wait = min(60, int(after) if after.isdigit() else 5 * 2 ** min(limited, 3))
+                if limited > 8 or time.time() + wait > deadline:
+                    raise RuntimeError(detail) from None
+                limiter.slow_down(wait)
+                continue
+            fails += 1
+            if e.code not in (408, 500, 502, 503, 504, 529) or fails == 3:
+                raise RuntimeError(detail) from None
         except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError) as e:
-            if attempt == 2:
+            fails += 1
+            if fails == 3:
                 raise RuntimeError(f"{type(e).__name__}: {e}") from None
-        time.sleep(2 * (attempt + 1))
+        time.sleep(2 * fails)
     usage = data.get("usage") or {}
     if "choices" in data:
         content = (data["choices"][0].get("message") or {}).get("content") or ""
@@ -216,7 +263,7 @@ def call_model(m, prompt):
     if not content.strip():
         raise RuntimeError("接口没有返回回答：" + json.dumps(data, ensure_ascii=False)[:300])
     return (content, usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0,
-            usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0, data.get("model", ""))
+            usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0, data.get("model", ""), took)
 
 
 # ---------- 出题与判分 ----------
@@ -264,7 +311,7 @@ def grade(q, reply):
 
 
 # ---------- 执行 ----------
-def run_model(m, questions, smoke=False):
+def run_model(m, questions, limiter):
     started = time.time()
     deadline = started + m["budget"]
     seen = {"ok": 0, "bad": 0, "why": ""}
@@ -278,16 +325,16 @@ def run_model(m, questions, smoke=False):
         if not seen["ok"] and seen["bad"] >= 8:     # 开头连续失败（密钥错、地址不通）就不再空耗
             row["error"] = "前 8 次请求全部失败，已中止：" + seen["why"]
             return row
-        t0 = time.time()
         try:
-            reply, row["tokens_in"], row["tokens_out"], row["returned_model"] = call_model(m, build_prompt(q))
+            reply, row["tokens_in"], row["tokens_out"], row["returned_model"], took = call_model(
+                m, build_prompt(q), limiter, deadline)
+            row["latency_s"] = round(took, 2)        # 只算成功那一次请求，不含排队和重试等待
             ok, row["got"] = grade(q, reply)
             row["correct"], row["reply"] = int(ok), reply[-4000:]
         except Exception as e:                       # 单题失败不影响其余题目
             row["error"] = str(e)[:500]
         seen["bad" if row["error"] else "ok"] += 1
         seen["why"] = row["error"] or seen["why"]
-        row["latency_s"] = round(time.time() - t0, 2)
         return row
 
     mixed = [q for k in range(7) for q in questions[k::7]]   # 各类别穿插着问，超预算时不会只砍掉排在后面的类别
@@ -310,6 +357,7 @@ def run_model(m, questions, smoke=False):
         "avg_latency_s": round(sum(r["latency_s"] for r in answered) / len(answered), 2) if answered else 0,
         "tokens_in": sum(r["tokens_in"] for r in rows), "tokens_out": sum(r["tokens_out"] for r in rows),
         "returned_model": next((r["returned_model"] for r in rows if r["returned_model"]), ""),
+        "limit_hits": limiter.hits, "limit_now": limiter.limit,
         "rows": rows,
     }
 
@@ -362,13 +410,17 @@ def main():
 
     db, lock, failed = None if args.smoke else open_db(), threading.Lock(), []
 
-    def one(m):
-        run = run_model(m, questions, args.smoke)
+    def one(m, limiter):
+        hits = limiter.hits
+        run = run_model(m, questions, limiter)
         with lock:
             cats = "  ".join(f"{CATS[c]} {v:.0f}" for c, v in run["cat_scores"].items())
             print(f"\n[{run['name']}] 总分 {run['score']:.1f}  对 {run['n_correct']}/{run['n_total']}  "
                   f"出错 {run['n_error']}  用时 {run['duration_s']:.0f}s  平均 {run['avg_latency_s']:.1f}s/题  "
                   f"输出 {run['tokens_out']} tokens\n    {cats}")
+            if run["limit_hits"] > hits:
+                print(f"    被限流 {run['limit_hits'] - hits} 次，已自动降速，当前并发 {run['limit_now']}"
+                      f"（可在配置里调低 concurrency 或设置 rpm）")
             errors = [r for r in run["rows"] if r["error"]]
             if errors:
                 print(f"    首个错误：{errors[0]['error'][:200]}")
@@ -381,8 +433,20 @@ def main():
                 for r in run["rows"]:
                     print(f"    {r['qid']}: 期望 {r['expected']} 得到 {r['got'] or r['error'][:80]}")
 
-    with ThreadPoolExecutor(len(models)) as pool:    # 各模型并行，整体仍在 10 分钟内结束
-        list(pool.map(one, models))
+    accounts = {}                                    # 同一账号（地址 + 密钥）的模型共用限速器并排队跑，不同账号之间并行
+    for m in models:
+        accounts.setdefault((m["base_url"], m["api_key"]), []).append(m)
+    if len(accounts) < len(models):
+        print(f"同一账号下的模型依次执行（共 {len(accounts)} 个账号并行），每个模型各自有 {models[0]['budget']} 秒预算。")
+
+    def account(group):
+        limiter = Limiter(group[0]["concurrency"], group[0]["rpm"])
+        for m in group:
+            limiter.limit = min(limiter.limit, m["concurrency"]) if limiter.hits else m["concurrency"]
+            one(m, limiter)
+
+    with ThreadPoolExecutor(len(accounts)) as pool:
+        list(pool.map(account, accounts.values()))
     if db:
         db.close()
         if not args.no_report:
