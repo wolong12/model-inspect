@@ -5,6 +5,7 @@
     python report.py --csv        # 另外导出 data/runs.csv
 """
 import csv
+import os
 import json
 import sqlite3
 import sys
@@ -12,7 +13,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "data" / "results.db"
+DB_PATH = Path(os.environ.get("MI_DB") or ROOT / "data" / "results.db")   # MI_DB：测试时指到别处，不碰正式数据
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
 
 

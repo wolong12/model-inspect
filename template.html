@@ -281,7 +281,7 @@ function renderHistory(view) {
     el("th", {class: "l"}, "模型 ID / 接口回显"), el("th", {class: "l"}, "备注"));
   const rows = view.slice(-300).reverse().map((r) => el("tr", null,
     el("td", null, el("span", {class: "key", style: `background:${colorOf(r.name)}`}), r.name), el("td", null, r.started_at.slice(0, 16)),
-    el("td", null, fmt(r.score)), el("td", null, `${r.n_correct}/${r.n_total}`), el("td", null, r.n_error), el("td", null, fmt(r.duration_s, 0) + "s"),
+    el("td", null, fmt(r.score)), el("td", null, `${r.n_correct}/${r.n_total}`), el("td", null, r.n_error), el("td", null, r.duration_s == null ? "–" : fmt(r.duration_s, 0) + "s"),
     el("td", null, fmt(r.avg_latency_s) + "s"), el("td", null, r.tokens_in.toLocaleString()), el("td", null, r.tokens_out.toLocaleString()),
     el("td", {class: "l"}, r.model + (r.returned_model && r.returned_model !== r.model ? " → " + r.returned_model : "")), el("td", {class: "l"}, r.note || "")));
   $("history").replaceChildren(el("thead", null, head), el("tbody", null, rows));

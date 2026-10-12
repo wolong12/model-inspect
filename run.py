@@ -20,10 +20,10 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "data" / "results.db"
+DB_PATH = Path(os.environ.get("MI_DB") or ROOT / "data" / "results.db")   # MI_DB：测试时指到别处，不碰正式数据
 SECRET_CONFIG = "secret://model-inspect"
 DEFAULTS = {"protocol": "", "concurrency": 8, "timeout": 180, "budget": 600, "max_tokens": 8192,
-            "rpm": 0, "stream": False, "params": {}}
+            "rpm": 0, "stream": True, "params": {}}
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
 SYSTEM = "你在参加一次标准化测验。可以先简要推理，但最后必须单独一行按要求的格式给出答案。"
 
@@ -350,8 +350,8 @@ def run_model(m, questions, limiter):
     return {
         "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(started)),
         "name": m["name"], "model": m["model"], "base_url": m["base_url"],
-        # 总分 = 各类别正确率的平均；出错和超时的题按答错计
-        "score": round(sum(cat_scores.values()) / len(cat_scores), 1),
+        # 总分 = 全部题目的正确率；出错和超时的题按答错计
+        "score": round(100 * sum(r["correct"] for r in rows) / len(rows), 1),
         "cat_scores": cat_scores, "n_total": len(rows), "n_correct": sum(r["correct"] for r in rows),
         "n_error": len(rows) - len(answered), "duration_s": round(time.time() - started, 1),
         "avg_latency_s": round(sum(r["latency_s"] for r in answered) / len(answered), 2) if answered else 0,
@@ -395,23 +395,29 @@ def main():
     ap.add_argument("--protocol", choices=["openai", "anthropic"], help="临时测试：协议，默认按地址判断")
     ap.add_argument("--list", action="store_true", help="列出配置里的模型后退出")
     ap.add_argument("--smoke", action="store_true", help="每个模型只问 3 题验证连通，不入库")
+    ap.add_argument("--budget", type=int, help="覆盖配置里的单模型总预算秒数（做一次性的完整测量时放宽）")
+    ap.add_argument("--timeout", type=int, help="覆盖配置里的单题超时秒数")
     ap.add_argument("--note", default="", help="给这次执行加备注（如“换了中转站”）")
     ap.add_argument("--no-report", action="store_true", help="跑完不重新生成 report.html")
     args = ap.parse_args()
 
     models = load_models(args)
+    for m in models:
+        m["budget"], m["timeout"] = args.budget or m["budget"], args.timeout or m["timeout"]
     if args.list:
         for m in models:
             print(f"{m['name']:28} {m['model']:32} {m['base_url']}")
         return
     bank = json.loads((ROOT / "questions.json").read_text(encoding="utf-8"))
-    questions = bank["questions"][::30] if args.smoke else bank["questions"]
+    questions = bank["questions"][::15] if args.smoke else bank["questions"]
     print(f"题库 {bank['suite']}，{len(questions)} 题；待测模型 {len(models)} 个：{', '.join(m['name'] for m in models)}")
 
     db, lock, failed = None if args.smoke else open_db(), threading.Lock(), []
 
     def one(m, limiter):
         hits = limiter.hits
+        with lock:
+            print(f"[{time.strftime('%H:%M:%S')}] 开始 {m['name']}", flush=True)
         run = run_model(m, questions, limiter)
         with lock:
             cats = "  ".join(f"{CATS[c]} {v:.0f}" for c, v in run["cat_scores"].items())

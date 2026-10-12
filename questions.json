@@ -1,32 +1,6 @@
 {
- "suite": "v1",
+ "suite": "v2",
  "questions": [
-  {
-   "id": "candy-bag",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "黑袋里有三种口味的糖，形状分圆形和五角星，靠手感可以分辨。数量是：苹果圆形 7、五角星 7；桃子圆形 9、五角星 6；西瓜圆形 8、五角星 4。至少取出多少颗，才能保证同时拥有「圆形苹果配五角星桃子」或「五角星苹果配圆形桃子」？",
-   "options": [
-    "26 颗",
-    "28 颗",
-    "21 颗",
-    "29 颗"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "candy-pen",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "一支笔和一个笔记本一共 11 元，笔比笔记本贵 10 元。笔记本多少钱？",
-   "options": [
-    "10 元",
-    "0.5 元",
-    "5.5 元",
-    "1 元"
-   ],
-   "answer": "B"
-  },
   {
    "id": "candy-sheep",
    "cat": "trap",
@@ -37,32 +11,6 @@
     "2 只",
     "6 只",
     "3 只"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "candy-speed",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "去程 60 公里，时速 30 公里；回程同一条路，时速 60 公里。全程平均时速是多少？",
-   "options": [
-    "45 公里/小时",
-    "36 公里/小时",
-    "50 公里/小时",
-    "40 公里/小时"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "candy-snail",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "井深 30 米。蜗牛白天向上爬 3 米，夜里滑下 2 米。它第几天能爬出井口？",
-   "options": [
-    "30 天",
-    "27 天",
-    "15 天",
-    "28 天"
    ],
    "answer": "D"
   },
@@ -80,32 +28,6 @@
    "answer": "C"
   },
   {
-   "id": "candy-rope",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "两根绳子烧完都刚好 1 小时，但燃烧不均匀。只有火柴，怎样烧出 45 分钟？",
-   "options": [
-    "两根绑在一起点一头，烧完是 45 分钟",
-    "两根都只点一头，烧完就是 45 分钟",
-    "第一根两头同时点，第二根只点一头；第一根烧完时把第二根另一头也点上",
-    "第一根点一头，烧到一半即 30 分钟，再点第二根"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "candy-monty",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "三扇门后面只有一扇有奖。你先选 1 扇，主持人打开另一扇空门，并问你要不要换到剩下那扇。换门的获胜概率是多少？",
-   "options": [
-    "1/2",
-    "3/4",
-    "2/3",
-    "1/3"
-   ],
-   "answer": "C"
-  },
-  {
    "id": "candy-soda",
    "cat": "trap",
    "src": "modeltool",
@@ -119,19 +41,6 @@
    "answer": "A"
   },
   {
-   "id": "candy-knight",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "骑士永远说真话，无赖永远说假话。甲说：「我们两个都是无赖。」甲和乙分别是什么人？",
-   "options": [
-    "甲骑士，乙无赖",
-    "甲无赖，乙骑士",
-    "甲骑士，乙骑士",
-    "甲无赖，乙无赖"
-   ],
-   "answer": "B"
-  },
-  {
    "id": "candy-nines",
    "cat": "trap",
    "src": "modeltool",
@@ -141,84 +50,6 @@
     "19 次",
     "10 次",
     "20 次"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "candy-strike",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "一座钟敲 6 下用了 5 秒。按同样的间隔，敲 12 下要几秒？",
-   "options": [
-    "11 秒",
-    "12 秒",
-    "10 秒",
-    "5 秒"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "candy-coins",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "两枚硬币一共 30 分，其中一枚不是 5 分硬币。这两枚是？",
-   "options": [
-    "两个 15 分",
-    "30 分和 0 分",
-    "20 分和 10 分",
-    "25 分和 5 分"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "candy-moses",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "摩西建造方舟时，每种洁净的动物带了几对？",
-   "options": [
-    "摩西没有建造方舟",
-    "2 对",
-    "1 对",
-    "7 对"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "candy-divide",
-   "cat": "trap",
-   "src": "modeltool",
-   "q": "30 除以 1/2，再加 10，结果是多少？",
-   "options": [
-    "40",
-    "25",
-    "70",
-    "20"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "logic-some",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "有些 A 是 B，有些 B 是 C。下面哪句一定成立？",
-   "options": [
-    "没有 A 是 C",
-    "有些 A 是 C",
-    "所有 A 都是 C",
-    "以上都不一定成立"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "logic-box",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "三只盒子分别装着苹果、桃子、苹果加桃子，标签全贴错了。只从标着「苹果加桃子」的盒子里摸出一颗苹果。标着「桃子」的盒子实际是什么？",
-   "options": [
-    "全是苹果",
-    "无法判断",
-    "全是桃子",
-    "苹果加桃子"
    ],
    "answer": "D"
   },
@@ -236,19 +67,6 @@
    "answer": "B"
   },
   {
-   "id": "logic-pigeon",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "5 个抽屉放进 11 个零件。下面哪句一定成立？",
-   "options": [
-    "至少有一个抽屉放了至少 3 个零件",
-    "有一个抽屉是空的",
-    "每个抽屉都至少 3 个",
-    "每个抽屉恰好 2 个"
-   ],
-   "answer": "A"
-  },
-  {
    "id": "logic-liar",
    "cat": "logic",
    "src": "modeltool",
@@ -262,32 +80,6 @@
    "answer": "C"
   },
   {
-   "id": "logic-weekday",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "今天是星期三。100 天之后是星期几？",
-   "options": [
-    "星期三",
-    "星期五",
-    "星期四",
-    "星期六"
-   ],
-   "answer": "B"
-  },
-  {
-   "id": "logic-ages",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "父亲的年龄是儿子的 4 倍。20 年后父亲的年龄是儿子的 2 倍。儿子现在几岁？",
-   "options": [
-    "40 岁",
-    "5 岁",
-    "20 岁",
-    "10 岁"
-   ],
-   "answer": "D"
-  },
-  {
    "id": "abi-choice",
    "cat": "logic",
    "src": "modeltool",
@@ -297,45 +89,6 @@
     "A 和 2",
     "A 和 3",
     "只翻 A"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "abi-neg",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "「并非所有高分模型都通过了糖果测试。」这句话等价于？",
-   "options": [
-    "至少有一个高分模型没通过糖果测试",
-    "没有高分模型",
-    "所有模型都通过了",
-    "所有高分模型都没通过"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "abi-scope",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "材料只说：A 的综合分是 90，B 的综合分是 55。材料有没有说 A 的每一项小分都是 90？",
-   "options": [
-    "没说",
-    "说了 B 的每一项都是 90",
-    "说了",
-    "说了两人每一项都相等"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "abi-digit",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "输出必须同时满足：只有一个数字，并且没有单位。哪条符合？",
-   "options": [
-    "七天",
-    "答案是 7",
-    "7",
-    "7 天"
    ],
    "answer": "C"
   },
@@ -354,48 +107,6 @@
    "context": "资料卡（只根据下面的记载作答）：\nT7：纯电轿车；三元锂 100 kWh；CLTC 702 km；800V 平台；峰值充电 320 kW；10%–80% 约 18 分钟；0–100 km/h 3.9 秒；风阻系数 0.205；激光雷达 1 颗；Pilot 3.0 城市 NOA\nX5：增程 SUV；纯电续航 CLTC 210 km；综合续航 1320 km；馈电油耗 5.8 L/100 km；峰值充电 120 kW；驱动电机位于后桥\nMini：小型纯电；磷酸铁锂 51 kWh；CLTC 430 km；无激光雷达；仅车道保持；不支持城市 NOA\n质保：三电 8 年或 16 万公里，以先到为准\n责任：辅助驾驶不能替代驾驶人，行驶责任由驾驶人承担"
   },
   {
-   "id": "car-x5-kw",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "X5 的充电峰值功率是多少？不要把它说成 T7 的峰值。",
-   "options": [
-    "11 kW",
-    "120 kW",
-    "320 kW",
-    "480 kW"
-   ],
-   "answer": "B",
-   "context": "资料卡（只根据下面的记载作答）：\nT7：纯电轿车；三元锂 100 kWh；CLTC 702 km；800V 平台；峰值充电 320 kW；10%–80% 约 18 分钟；0–100 km/h 3.9 秒；风阻系数 0.205；激光雷达 1 颗；Pilot 3.0 城市 NOA\nX5：增程 SUV；纯电续航 CLTC 210 km；综合续航 1320 km；馈电油耗 5.8 L/100 km；峰值充电 120 kW；驱动电机位于后桥\nMini：小型纯电；磷酸铁锂 51 kWh；CLTC 430 km；无激光雷达；仅车道保持；不支持城市 NOA\n质保：三电 8 年或 16 万公里，以先到为准\n责任：辅助驾驶不能替代驾驶人，行驶责任由驾驶人承担"
-  },
-  {
-   "id": "car-x5-ev",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "把 X5 的纯电续航说成和综合续航一样，是混淆。纯电 CLTC 续航是多少？",
-   "options": [
-    "430 km",
-    "1320 km",
-    "702 km",
-    "210 km"
-   ],
-   "answer": "D",
-   "context": "资料卡（只根据下面的记载作答）：\nT7：纯电轿车；三元锂 100 kWh；CLTC 702 km；800V 平台；峰值充电 320 kW；10%–80% 约 18 分钟；0–100 km/h 3.9 秒；风阻系数 0.205；激光雷达 1 颗；Pilot 3.0 城市 NOA\nX5：增程 SUV；纯电续航 CLTC 210 km；综合续航 1320 km；馈电油耗 5.8 L/100 km；峰值充电 120 kW；驱动电机位于后桥\nMini：小型纯电；磷酸铁锂 51 kWh；CLTC 430 km；无激光雷达；仅车道保持；不支持城市 NOA\n质保：三电 8 年或 16 万公里，以先到为准\n责任：辅助驾驶不能替代驾驶人，行驶责任由驾驶人承担"
-  },
-  {
-   "id": "car-drag",
-   "cat": "logic",
-   "src": "modeltool",
-   "q": "有人把 T7 风阻系数记成 0.25。资料卡的风阻系数是？",
-   "options": [
-    "0.320",
-    "0.205",
-    "0.250",
-    "0.280"
-   ],
-   "answer": "B",
-   "context": "资料卡（只根据下面的记载作答）：\nT7：纯电轿车；三元锂 100 kWh；CLTC 702 km；800V 平台；峰值充电 320 kW；10%–80% 约 18 分钟；0–100 km/h 3.9 秒；风阻系数 0.205；激光雷达 1 颗；Pilot 3.0 城市 NOA\nX5：增程 SUV；纯电续航 CLTC 210 km；综合续航 1320 km；馈电油耗 5.8 L/100 km；峰值充电 120 kW；驱动电机位于后桥\nMini：小型纯电；磷酸铁锂 51 kWh；CLTC 430 km；无激光雷达；仅车道保持；不支持城市 NOA\n质保：三电 8 年或 16 万公里，以先到为准\n责任：辅助驾驶不能替代驾驶人，行驶责任由驾驶人承担"
-  },
-  {
    "id": "code-parseint",
    "cat": "code",
    "src": "modeltool",
@@ -405,97 +116,6 @@
     "[NaN, NaN, NaN]",
     "[1, 2, 3]",
     "[1, NaN, NaN]"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "code-eq",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "JavaScript 中 [] == ![] 的结果是？",
-   "options": [
-    "false",
-    "true",
-    "抛出 TypeError",
-    "undefined"
-   ],
-   "answer": "B"
-  },
-  {
-   "id": "code-var",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "同步代码跑完后，三次定时器会打印什么？\n代码：\nfor (var i = 0; i < 3; i++) {\n  setTimeout(() => console.log(i), 0);\n}",
-   "options": [
-    "2 2 2",
-    "0 1 2",
-    "undefined undefined undefined",
-    "3 3 3"
-   ],
-   "answer": "D"
-  },
-  {
-   "id": "code-max",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "Math.max() 在不传参数时返回什么？",
-   "options": [
-    "-Infinity",
-    "抛出异常",
-    "undefined",
-    "0"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "code-lt2",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "表达式 3 < 2 < 1 的结果是？",
-   "options": [
-    "false",
-    "报错",
-    "true",
-    "undefined"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "code-join",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "表达式 [1, 2] + [3, 4] 的结果是？",
-   "options": [
-    "\"10\"",
-    "\"1,23,4\"",
-    "[1, 2, 3, 4]",
-    "报错"
-   ],
-   "answer": "B"
-  },
-  {
-   "id": "code-objis",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "Object.is(NaN, NaN) 的结果是？",
-   "options": [
-    "true",
-    "null",
-    "false",
-    "报错"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "code-empty",
-   "cat": "code",
-   "src": "modeltool",
-   "q": "Number(\"\") 的结果是？",
-   "options": [
-    "\"\"",
-    "NaN",
-    "undefined",
-    "0"
    ],
    "answer": "D"
   },
@@ -547,63 +167,6 @@
    "answer": "H"
   },
   {
-   "id": "mmlupro-8709",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/math",
-   "q": "If A is the 2 by 2 matrix whose (i, j) entry is equal to i + j, and B is the 3 by 3 matrix whose (i, j) entry is equal to i + j, find the value of the sum detA + detB.",
-   "options": [
-    "-3",
-    "3",
-    "-1",
-    "0",
-    "-4",
-    "4",
-    "5",
-    "-2",
-    "2",
-    "1"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "mmlupro-7909",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/math",
-   "q": "The midterm scores for a statistics course were approximately normally distributed with a mean of 52 points and a standard deviation of 4 points. The final exam scores were approximately normally distributed with a mean of 112 points and a standard deviation of 10 points. One student had a score of 58 points on the midterm. If she had the same standardized score (z-score) on the final exam, what must her score have been?",
-   "options": [
-    "127 points",
-    "58 points",
-    "132 points",
-    "102 points",
-    "92 points",
-    "122 points",
-    "15 points",
-    "118 points",
-    "112 points",
-    "142 points"
-   ],
-   "answer": "A"
-  },
-  {
-   "id": "mmlupro-9910",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/physics",
-   "q": "(a) If the x direction is normal to the surface of the earth and directed upward, the gravitational force is F_G = -Mgx˄, where g is the acceleration of gravity and has the approximate value 980 cm/sec^2. Calculate the work done by gravity when a mass of 100 gm falls through 10 cm. (b)If the particle in (a) was initially at rest, what is its kinetic energy and its velocity at the end of its 10-cm fall?",
-   "options": [
-    "980,000 ergs, 1.41 × 10^2 cm/sec",
-    "500,000 ergs, 1.41 × 10^2 cm/sec",
-    "200,000 ergs, 9.80 × 10^1 cm/sec",
-    "980,000 ergs, 2.00 × 10^2 cm/sec",
-    "500,000 ergs, 1.20 × 10^2 cm/sec",
-    "1,200,000 ergs, 1.10 × 10^2 cm/sec",
-    "980,000 ergs, 9.80 × 10^1 cm/sec",
-    "800,000 ergs, 1.25 × 10^2 cm/sec",
-    "980,000 ergs, 2.20 × 10^2 cm/sec",
-    "1,000,000 ergs, 1.50 × 10^2 cm/sec"
-   ],
-   "answer": "A"
-  },
-  {
    "id": "mmlupro-10347",
    "cat": "knowledge",
    "src": "MMLU-Pro/physics",
@@ -621,44 +184,6 @@
     "2.5 inches closer to the mirror"
    ],
    "answer": "D"
-  },
-  {
-   "id": "mmlupro-9916",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/physics",
-   "q": "A square coil of 50 cm^2 area consisting of 20 loops is rotated about a transverse axis at the rate of 2 turns per second in a uniform magnetic field of flux density 500 gauss. The coil has a resistance of 20 ohms, (a) What is the average electromotive force induced in the coil during one quarter cycle of a revolution? (b) What is the average current in a complete cycle? (c) How much charge is passed through the coil in this interval?",
-   "options": [
-    "0.03 volt, 0.002 amperes, 0.00025 coulomb",
-    "0.05 volt, 0.0025 amperes, 0.00030 coulomb",
-    "0.04 volt, 0.002 amperes, 0.00025 coulomb",
-    "0.01 volt, 0.004 amperes, 0.00050 coulomb",
-    "0.03 volt, 0.001 amperes, 0.00010 coulomb",
-    "0.02 volt, 0.0015 amperes, 0.00015 coulomb",
-    "0.04 volt, 0.002 amperes, 0.00020 coulomb",
-    "0.06 volt, 0.003 amperes, 0.00035 coulomb",
-    "0.04 volt, 0.003 amperes, 0.00025 coulomb",
-    "0.05 volt, 0.001 amperes, 0.00020 coulomb"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "mmlupro-4135",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/chemistry",
-   "q": "Determine the quantity of heat required to convert 10 g of ice at 0°C to vapor at 100°C, For water, heat of fusion = 80 cal/g, heat of vaporization = 540 cal/g, and specific heat = 1 cal/g -°C.",
-   "options": [
-    "800 calories",
-    "10800 calories",
-    "7200 calories",
-    "8500 calories",
-    "1000 calories",
-    "8900 calories",
-    "6200 calories",
-    "5400 calories",
-    "6400 calories",
-    "9800 calories"
-   ],
-   "answer": "C"
   },
   {
    "id": "mmlupro-4196",
@@ -699,44 +224,6 @@
    "answer": "A"
   },
   {
-   "id": "mmlupro-11335",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/engineering",
-   "q": "Evaluate the force on the spring of a cone-clutch delivering a torqueof 2000 lbs.-in. The mean diameter for the disc is 18 in., the clutch angle is 10° and the coefficient of friction is 0.30.",
-   "options": [
-    "100 lbs",
-    "175 lbs",
-    "128.6 lbs",
-    "110.5 lbs",
-    "85 lbs",
-    "150 lbs",
-    "200 lbs",
-    "95 lbs",
-    "215 lbs",
-    "250 lbs"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "mmlupro-11351",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/engineering",
-   "q": "A short dipole has a radiation resistance R_r=\\surd(\\mu_0 / \\epsilon_0) [(\\betal)^2 / (6\\pi)] ohms. FindA_emthe maximum effectiveaperture of this dipole.",
-   "options": [
-    "0.359 λ^2 square meters",
-    "0.219 λ^2 square meters",
-    "0.119 λ^2 square meters",
-    "0.259 λ^2 square meters",
-    "0.169 λ^2 square meters",
-    "0.419 λ^2 square meters",
-    "0.519 λ^2 square meters",
-    "0.319 λ^2 square meters",
-    "0.289 λ^2 square meters",
-    "0.159 λ^2 square meters"
-   ],
-   "answer": "C"
-  },
-  {
    "id": "mmlupro-10424",
    "cat": "knowledge",
    "src": "MMLU-Pro/computer science",
@@ -756,120 +243,6 @@
    "answer": "D"
   },
   {
-   "id": "mmlupro-10653",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/computer science",
-   "q": "You want to cluster 7 points into 3 clusters using the k-Means Clustering algorithm. Suppose after the first iteration, clusters C1, C2 and C3 contain the following two-dimensional points: C1 contains the 2 points: {(0,6), (6,0)} C2 contains the 3 points: {(2,2), (4,4), (6,6)} C3 contains the 2 points: {(5,5), (7,7)} What are the cluster centers computed for these 3 clusters?",
-   "options": [
-    "C1: (3,3), C2: (6,6), C3: (12,12)",
-    "C1: (6,6), C2: (12,12), C3: (12,12)",
-    "C1: (3,3), C2: (4,4), C3: (6,6)",
-    "C1: (1,1), C2: (4,4), C3: (6,6)",
-    "C1: (0,0), C2: (4,4), C3: (6,6)",
-    "C1: (6,0), C2: (4,4), C3: (7,7)",
-    "C1: (3,3), C2: (2,2), C3: (7,7)",
-    "C1: (2,2), C2: (5,5), C3: (7,7)",
-    "C1: (0,0), C2: (48,48), C3: (35,35)",
-    "C1: (0,6), C2: (2,2), C3: (5,5)"
-   ],
-   "answer": "C"
-  },
-  {
-   "id": "mmlupro-10525",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/computer science",
-   "q": "Statement 1| Density estimation (using say, the kernel density estimator) can be used to perform classification. Statement 2| The correspondence between logistic regression and Gaussian Naive Bayes (with identity class covariances) means that there is a one-to-one correspondence between the parameters of the two classifiers.",
-   "options": [
-    "Partially True, Partially False",
-    "Mostly True, Mostly False",
-    "Partially False, Partially True",
-    "False for certain cases, True for certain cases",
-    "True, True",
-    "True, False",
-    "False, False",
-    "False, True",
-    "Mostly False, Mostly True",
-    "True for certain cases, False for certain cases"
-   ],
-   "answer": "F"
-  },
-  {
-   "id": "mmlupro-6886",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/economics",
-   "q": "Assume the reserve requirement is 10 percent. If the FED sells $29 million worth of government securities in an open market operation then the money supply can",
-   "options": [
-    "decrease by $29 million.",
-    "increase by $2900 million.",
-    "decrease by $2.9 million.",
-    "stay the same.",
-    "increase by $29 million.",
-    "decrease by $2900 million.",
-    "decrease by $10 million.",
-    "increase by $290 million.",
-    "increase by $2.9 million.",
-    "decrease by $290 million."
-   ],
-   "answer": "J"
-  },
-  {
-   "id": "mmlupro-7363",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/economics",
-   "q": "Jason cleans swimming pools in a perfectly competitive local market. A profit maximizer, he can charge $10 per pool to clean 9 pools per day, incurring total variable costs of $80 and total fixed costs of $20. Which of the following is true?",
-   "options": [
-    "Jason should clean 10 pools per day, with economic losses of $20.",
-    "Jason should shut down in the short run, with economic losses of $10.",
-    "Jason should clean 8 pools per day, with economic losses of $20.",
-    "Jason should clean 9 pools per day, with economic losses of $20.",
-    "Jason should clean 8 pools per day, with economic losses of $10.",
-    "Jason should clean 10 pools per day, with economic losses of $10.",
-    "Jason should clean 9 pools per day, with economic losses of $10.",
-    "Jason should shut down in the short run, with economic losses of $20.",
-    "Jason should shut down in the short run, with economic profits of $10.",
-    "Jason should clean 9 pools per day, with economic profits of $10."
-   ],
-   "answer": "G"
-  },
-  {
-   "id": "mmlupro-6906",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/economics",
-   "q": "If the government wants to establish a socially optimal price for a natural monopoly, it should select the price at which",
-   "options": [
-    "the demand curve intersects the supply curve",
-    "marginal revenue equals zero",
-    "the average total cost equals zero",
-    "the average revenue equals the average total cost",
-    "the marginal cost curve intersects the demand curve",
-    "the marginal revenue equals the marginal cost",
-    "the marginal cost curve intersects the average total cost curve",
-    "the marginal revenue curve intersects the supply curve",
-    "the average total cost curve intersects the demand curve",
-    "average revenue equals zero"
-   ],
-   "answer": "E"
-  },
-  {
-   "id": "mmlupro-601",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/business",
-   "q": "The Charge-It revolving charge card requires payment of one-sixth of the balance each month, along with an interest charge of 1(1/2)%. How much must be paid on a balance of $75? What is the new unpaid balance? What is the annual rate of interest charged?",
-   "options": [
-    "$15.00, $60.00, 18%",
-    "$14.63, $60.37, 20%",
-    "$12.75, $62.25, 17%",
-    "$13.63, $63.50, 17%",
-    "$13.63, $62.50, 18%",
-    "$12.50, $63.50, 19%",
-    "$15.00, $61.50, 17%",
-    "$12.50, $62.50, 18%",
-    "$13.13, $61.87, 18%",
-    "$14.63, $61.50, 19%"
-   ],
-   "answer": "E"
-  },
-  {
    "id": "mmlupro-1537",
    "cat": "knowledge",
    "src": "MMLU-Pro/law",
@@ -885,25 +258,6 @@
     "Yes, because the man was not given a fair trial at the county court.",
     "Yes, because it is unconstitutional to punish someone for the status of being an alcoholic or a drug addict.",
     "Yes, because the man's illness should be treated medically, not criminally."
-   ],
-   "answer": "G"
-  },
-  {
-   "id": "mmlupro-2298",
-   "cat": "knowledge",
-   "src": "MMLU-Pro/psychology",
-   "q": "To treat Zoe's anorexia nervosa, her doctors put her on intravenous feeding tubes, tried to change her irrational belief that she was too fat, and discussed how her early family relationships may have contributed to her current problems. This approach would best be classified as",
-   "options": [
-    "Behaviorist.",
-    "cognitive behavioral.",
-    "Humanistic.",
-    "Psychoanalytic.",
-    "Socio-cultural.",
-    "psychodynamic.",
-    "eclectic.",
-    "biological.",
-    "Gestalt.",
-    "Existential."
    ],
    "answer": "G"
   },
@@ -988,13 +342,6 @@
    "answer": "B"
   },
   {
-   "id": "calc-mul-1",
-   "cat": "compute",
-   "src": "generated",
-   "q": "不使用工具，精确计算 7662 × 1129 的结果。",
-   "answer": "8650398"
-  },
-  {
    "id": "calc-mul-2",
    "cat": "compute",
    "src": "generated",
@@ -1058,25 +405,11 @@
    "answer": "bzrtjauqnazvgxnvtbswnr"
   },
   {
-   "id": "calc-rank-1",
-   "cat": "compute",
-   "src": "generated",
-   "q": "下面 18 个数中，从小到大排第 7 的数是多少？\n445、650、267、869、444、687、229、961、860、670、942、640、226、342、791、972、121、761",
-   "answer": "445"
-  },
-  {
    "id": "calc-date-1",
    "cat": "compute",
    "src": "generated",
    "q": "2023 年 3 月 14 日是星期二。673 天之后是几月几日？（答案格式 YYYY-MM-DD）",
    "answer": "2025-01-15"
-  },
-  {
-   "id": "calc-expr-1",
-   "cat": "compute",
-   "src": "generated",
-   "q": "精确计算表达式的值（% 表示取余）：((31 * 47 - 65) * 38 + 40) % 997",
-   "answer": "95"
   }
  ]
 }
