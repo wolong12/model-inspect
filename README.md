@@ -83,7 +83,16 @@ python run.py --base-url https://api.example.com/v1 --api-key secret://model-ins
 | `budget` | 单个模型总预算秒数，超过后剩余题目记为未作答 | 600 |
 | `stream` | 用流式请求。慢的推理模型经中转站时非流式容易 524，可设为 `true` | false |
 | `max_tokens` | 只对 Anthropic 协议生效（该协议必填） | 8192 |
+| `efforts` | 推理强度列表，如 `["low", "high"]`。每档展开成一个独立变体 `name@档位`，OpenAI 协议发 `reasoning_effort`，Anthropic 协议发 `output_config.effort` | 不展开 |
 | `params` | 原样并入请求体，如 `{"temperature": 0, "reasoning_effort": "high"}` | `{}` |
+
+对比不同推理强度：
+
+```json
+{"name": "gpt-6.1-sol", "model": "gpt-6.1-sol", "efforts": ["low", "medium", "high", "xhigh", "max"]}
+```
+
+会得到 `gpt-6.1-sol@low` … `gpt-6.1-sol@max` 五条曲线，在报告里并排比较得分、耗时和输出 tokens。`python run.py gpt-6.1-sol` 选中全部档位，`python run.py gpt-6.1-sol@high` 只跑一档。各档是并行跑的，档位多时注意接口限流；高档位单题更慢，可能需要调大 `concurrency` 或 `budget`。
 
 默认不发送 `temperature` 和 OpenAI 协议的 `max_tokens`，因为不少推理模型会拒绝这些参数；需要时写进 `params`。注意：`params` 不同会影响得分，改了参数建议换一个 `name`，否则曲线前后不可比。
 

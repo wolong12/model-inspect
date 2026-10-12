@@ -76,6 +76,21 @@ def load_config(source):
         return yaml.safe_load(text)
 
 
+def expand_efforts(models):
+    """带 "efforts": [...] 的条目展开成每档一个变体，名字是 name@effort，各自成一条长期曲线。"""
+    for m in models:
+        efforts = m.get("efforts")
+        if not efforts:
+            yield m
+            continue
+        base = m.get("name") or m.get("model")
+        for e in efforts:
+            anthropic = m.get("protocol") == "anthropic" or "anthropic.com" in m.get("base_url", "")
+            extra = {"output_config": {"effort": e}} if anthropic else {"reasoning_effort": e}
+            yield {**{k: v for k, v in m.items() if k != "efforts"}, "name": f"{base}@{e}", "base": base,
+                   "params": {**extra, **m.get("params", {})}}
+
+
 def load_models(args):
     """返回待测模型列表，每项是合并了 defaults 的 dict。"""
     if args.model:
@@ -89,7 +104,7 @@ def load_models(args):
         cfg = load_config(args.config or os.environ.get("MI_CONFIG") or (str(local) if local.exists() else SECRET_CONFIG))
         models, defaults = cfg.get("models", []), cfg.get("defaults", {})
     out = []
-    for m in models:
+    for m in expand_efforts(models):
         m = {**DEFAULTS, **defaults, **m}
         m.setdefault("name", m.get("model"))
         key = str(m.get("api_key", ""))
@@ -97,11 +112,11 @@ def load_models(args):
             m["api_key"] = os.environ.get(key[1:], "")
         out.append(m)
     if args.names:
-        known = {m["name"] for m in out}
+        known = {m["name"] for m in out} | {m["base"] for m in out if m.get("base")}
         missing = [n for n in args.names if n not in known]
         if missing:
             sys.exit(f"配置里没有这些模型：{', '.join(missing)}。可选：{', '.join(sorted(known))}")
-        out = [m for m in out if m["name"] in args.names]
+        out = [m for m in out if m["name"] in args.names or m.get("base") in args.names]   # 写基础名即选中它的全部 effort
     if '"secret://' in json.dumps(out):              # 配置里单个字段也可以写成 secret://名字 或 secret://名字#字段
         try:
             out = secret_resolver().resolve_tree(out)
