@@ -141,6 +141,9 @@ def load_models(args):
     for m in out:
         if not m.get("base_url") or not m.get("api_key") or not m.get("model"):
             sys.exit(f"模型 {m.get('name')} 缺少 base_url / api_key / model。")
+        if not str(m["api_key"]).isascii():          # 多半是示例里的中文占位符没换成真密钥
+            sys.exit(f"模型 {m['name']} 的 api_key 含有非英文字符，像是没替换的占位符。"
+                     f"检查该模型自己的 api_key，没写的话用的是 defaults 里的。")
     return out
 
 
