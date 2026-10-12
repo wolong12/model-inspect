@@ -43,16 +43,22 @@ CREATE INDEX IF NOT EXISTS answers_run ON answers(run_id);
 
 # ---------- 配置 ----------
 def secret_resolver():
-    """camtools 的 ct secret SDK；当前解释器缺它的依赖时，换到 camtools 的 uv 环境重新执行。"""
+    """camtools 的 ct secret SDK；当前解释器用不了它（缺依赖或 Python 版本太低）时，换到 camtools 的 uv 环境重新执行。"""
     home = Path(os.environ.get("CAMTOOLS_HOME", "~/qb/camtools")).expanduser()
     sys.path.append(str(home))
     try:
         from local_secrets import LocalSecretProvider, SecretResolver
-    except ImportError as e:
-        if os.environ.get("MI_REEXEC") or not (home / "local_secrets").is_dir():
-            sys.exit(f"加载 ct secret SDK 失败（{e}）。确认 camtools 在 {home}，或用 CAMTOOLS_HOME 指定。")
+    except Exception as e:                           # 旧 Python 导入 SDK 抛的是 TypeError/SyntaxError，不只是 ImportError
+        if not (home / "local_secrets").is_dir():
+            sys.exit(f"找不到 ct secret SDK：{home}/local_secrets 不存在。用环境变量 CAMTOOLS_HOME 指定 camtools 的位置。")
+        if os.environ.get("MI_REEXEC"):
+            sys.exit(f"在 camtools 的 uv 环境里仍无法加载 ct secret SDK（{type(e).__name__}: {e}）。")
         os.environ["MI_REEXEC"] = "1"
-        os.execvp("uv", ["uv", "run", "--project", str(home), "python", str(Path(__file__).resolve()), *sys.argv[1:]])
+        try:
+            os.execvp("uv", ["uv", "run", "--project", str(home), "python", str(Path(__file__).resolve()), *sys.argv[1:]])
+        except OSError:
+            sys.exit(f"当前 Python {sys.version.split()[0]} 无法加载 ct secret SDK（{type(e).__name__}: {e}），"
+                     f"并且找不到 uv 来切换到 camtools 的环境。请安装 uv，或改用：uv run --project {home} python run.py")
     return SecretResolver(LocalSecretProvider(profile=os.environ.get("MI_SECRET_PROFILE", "default")))
 
 
@@ -61,9 +67,11 @@ def load_config(source):
     if source.startswith("secret://"):
         try:
             text = secret_resolver().resolve(source)
-        except Exception as e:                       # 只报错误类型，不带出任何机密内容
-            sys.exit(f"读取 {source} 失败（{type(e).__name__}）。先执行：ct secret import {source} --stdin"
-                     f"（粘贴配置后按 Ctrl-D），未初始化过则先 ct secret init。")
+        except Exception as e:                       # SDK 的报错只含引用名和原因，不含机密内容
+            hint = {"SecretNotInitializedError": "本机还没初始化，先执行 ct secret init，再 import。",
+                    "SecretNotFoundError": f"还没有这条配置，执行：ct secret import {source} --stdin（粘贴后按 Ctrl-D）。",
+                    }.get(type(e).__name__, f"用 ct secret doctor {source} 检查 keyring 和密文是否完好。")
+            sys.exit(f"读取 {source} 失败：{type(e).__name__}: {e}\n{hint}")
     else:
         path = Path(source)
         if not path.exists():
@@ -72,8 +80,16 @@ def load_config(source):
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        import yaml                                  # 走到这里说明已在 camtools 环境里，或用户自己装了 pyyaml
-        return yaml.safe_load(text)
+        try:
+            import yaml                              # 走到这里说明已在 camtools 环境里，或用户自己装了 pyyaml
+            cfg = yaml.safe_load(text)
+        except Exception as e:                       # 不打印 yaml 的报错原文：它会带出配置片段，可能含密钥
+            line = getattr(getattr(e, "problem_mark", None), "line", None)
+            sys.exit(f"{source} 的内容不是合法的 JSON 或 YAML（{type(e).__name__}"
+                     + (f"，问题在第 {line + 1} 行附近" if line is not None else "") + "）。修正后重新 import。")
+        if not isinstance(cfg, dict) or not cfg.get("models"):
+            sys.exit(f"{source} 里没有 models 列表，格式见 config.example.json。")
+        return cfg
 
 
 def expand_efforts(models):
