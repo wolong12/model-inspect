@@ -409,7 +409,7 @@ def main():
             print(f"{m['name']:28} {m['model']:32} {m['base_url']}")
         return
     bank = json.loads((ROOT / "questions.json").read_text(encoding="utf-8"))
-    questions = bank["questions"][::15] if args.smoke else bank["questions"]
+    questions = bank["questions"][1::15] if args.smoke else bank["questions"]
     print(f"题库 {bank['suite']}，{len(questions)} 题；待测模型 {len(models)} 个：{', '.join(m['name'] for m in models)}")
 
     db, lock, failed = None if args.smoke else open_db(), threading.Lock(), []
