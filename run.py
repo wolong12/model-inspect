@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """model-inspect：10 分钟内给模型做一次固定题库体检，结果累计进 SQLite。
 
-    python run.py                 # 测 config.json 里的全部模型
+    python run.py                 # 测配置里的全部模型（配置默认从 ct secret 的 secret://model-inspect 读取）
     python run.py gpt-x deepseek  # 只测指定模型（按 name）
     python run.py --base-url URL --api-key KEY --model ID   # 不写配置，临时测一个
     python run.py --smoke         # 每个模型只问 3 题验证连通，不入库
@@ -21,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = ROOT / "data" / "results.db"
+SECRET_CONFIG = "secret://model-inspect"
 DEFAULTS = {"protocol": "", "concurrency": 8, "timeout": 180, "budget": 600, "max_tokens": 8192,
             "stream": False, "params": {}}
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
@@ -41,6 +42,40 @@ CREATE INDEX IF NOT EXISTS answers_run ON answers(run_id);
 
 
 # ---------- 配置 ----------
+def secret_resolver():
+    """camtools 的 ct secret SDK；当前解释器缺它的依赖时，换到 camtools 的 uv 环境重新执行。"""
+    home = Path(os.environ.get("CAMTOOLS_HOME", "~/qb/camtools")).expanduser()
+    sys.path.append(str(home))
+    try:
+        from local_secrets import LocalSecretProvider, SecretResolver
+    except ImportError as e:
+        if os.environ.get("MI_REEXEC") or not (home / "local_secrets").is_dir():
+            sys.exit(f"加载 ct secret SDK 失败（{e}）。确认 camtools 在 {home}，或用 CAMTOOLS_HOME 指定。")
+        os.environ["MI_REEXEC"] = "1"
+        os.execvp("uv", ["uv", "run", "--project", str(home), "python", str(Path(__file__).resolve()), *sys.argv[1:]])
+    return SecretResolver(LocalSecretProvider(profile=os.environ.get("MI_SECRET_PROFILE", "default")))
+
+
+def load_config(source):
+    """source 是 secret:// 引用（整份配置存在 ct secret 里）或本地文件路径；内容是 JSON 或 YAML。"""
+    if source.startswith("secret://"):
+        try:
+            text = secret_resolver().resolve(source)
+        except Exception as e:                       # 只报错误类型，不带出任何机密内容
+            sys.exit(f"读取 {source} 失败（{type(e).__name__}）。先执行：ct secret import {source} --stdin"
+                     f"（粘贴配置后按 Ctrl-D），未初始化过则先 ct secret init。")
+    else:
+        path = Path(source)
+        if not path.exists():
+            sys.exit(f"找不到 {path}。")
+        text = path.read_text(encoding="utf-8")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        import yaml                                  # 走到这里说明已在 camtools 环境里，或用户自己装了 pyyaml
+        return yaml.safe_load(text)
+
+
 def load_models(args):
     """返回待测模型列表，每项是合并了 defaults 的 dict。"""
     if args.model:
@@ -50,10 +85,8 @@ def load_models(args):
                "protocol": args.protocol or ""}
         models, defaults = [one], {}
     else:
-        path = Path(args.config)
-        if not path.exists():
-            sys.exit(f"找不到 {path}。先复制 config.example.json 为 config.json 并填写，或用 --base-url/--api-key/--model 临时测试。")
-        cfg = json.loads(path.read_text(encoding="utf-8"))
+        local = ROOT / "config.json"
+        cfg = load_config(args.config or os.environ.get("MI_CONFIG") or (str(local) if local.exists() else SECRET_CONFIG))
         models, defaults = cfg.get("models", []), cfg.get("defaults", {})
     out = []
     for m in models:
@@ -69,6 +102,11 @@ def load_models(args):
         if missing:
             sys.exit(f"配置里没有这些模型：{', '.join(missing)}。可选：{', '.join(sorted(known))}")
         out = [m for m in out if m["name"] in args.names]
+    if '"secret://' in json.dumps(out):              # 配置里单个字段也可以写成 secret://名字 或 secret://名字#字段
+        try:
+            out = secret_resolver().resolve_tree(out)
+        except Exception as e:
+            sys.exit(f"解析配置里的 secret:// 引用失败（{type(e).__name__}：{e}）。用 ct secret status <引用> 检查是否已配置。")
     for m in out:
         if not m.get("base_url") or not m.get("api_key") or not m.get("model"):
             sys.exit(f"模型 {m.get('name')} 缺少 base_url / api_key / model。")
@@ -267,7 +305,7 @@ def open_db():
 def main():
     ap = argparse.ArgumentParser(description="模型快速体检：固定题库，结果累计进 data/results.db")
     ap.add_argument("names", nargs="*", help="要测的模型 name；不写则测配置里的全部")
-    ap.add_argument("--config", default=str(ROOT / "config.json"))
+    ap.add_argument("--config", help="配置来源：secret:// 引用或文件路径。默认用 config.json（存在时），否则 " + SECRET_CONFIG)
     ap.add_argument("--base-url", help="临时测试：接口地址（也可用环境变量 MI_BASE_URL）")
     ap.add_argument("--api-key", help="临时测试：密钥（也可用环境变量 MI_API_KEY）")
     ap.add_argument("--model", help="临时测试：模型 ID")

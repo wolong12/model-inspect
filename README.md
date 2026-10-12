@@ -8,8 +8,13 @@
 
 ## 快速开始
 
+接口地址、密钥、模型列表整份存在 camtools 的 `ct secret`（`~/qb/camtools/local_secrets`）里，项目目录里不放任何密钥。
+
 ```bash
-cp config.example.json config.json      # 填接口地址、密钥、模型
+ct secret init                                    # 本机第一次用 ct secret 时执行一次
+ct secret import secret://model-inspect --stdin   # 粘贴配置（格式见 config.example.json），回车后按 Ctrl-D
+
+python run.py --list                    # 看读到了哪些模型（不显示密钥）
 python run.py --smoke                   # 每个模型只问 3 题，验证能连通（不入库）
 python run.py                           # 测全部模型，入库并更新 report.html
 python run.py gpt-5.5 deepseek-chat     # 只测指定模型（按 name）
@@ -17,46 +22,61 @@ python run.py gpt-5.5 deepseek-chat     # 只测指定模型（按 name）
 
 然后用浏览器直接打开 `report.html`。
 
-不想写配置文件，也可以临时测一个：
-
-```bash
-python run.py --base-url https://api.example.com/v1 --api-key sk-xxx --model gpt-5.5
-# 或者：MI_BASE_URL=... MI_API_KEY=... python run.py --model gpt-5.5
-```
-
 要长期观察，就定时执行，比如每天 9 点：
 
 ```cron
 0 9 * * * cd /path/to/model-inspect && python3 run.py >> data/cron.log 2>&1
 ```
 
+注意：`ct secret` 依赖系统 keyring。Linux 上 cron 没有登录会话时 keyring 可能读不到，这一点还没有实际验证过；读取失败时脚本会以非零状态退出并说明原因。
+
 ## 配置
 
-`config.json`（已在 `.gitignore` 里，不会被提交）：
+`run.py` 通过 ct secret 的 SDK（`SecretResolver` + `LocalSecretProvider`）在内存里解密配置，明文不落盘、不打印。当前 Python 缺 SDK 依赖时，脚本会自动换到 camtools 的 uv 环境重新执行，命令不用变。camtools 不在 `~/qb/camtools` 时用环境变量 `CAMTOOLS_HOME` 指定，非默认 profile 用 `MI_SECRET_PROFILE`。
+
+配置内容是 JSON 或 YAML：
 
 ```json
 {
   "defaults": {
     "base_url": "https://api.example.com/v1",
-    "api_key": "$OPENAI_API_KEY",
+    "api_key": "sk-默认密钥",
     "concurrency": 8
   },
   "models": [
     {"name": "gpt-5.5", "model": "gpt-5.5"},
-    {"name": "deepseek@官方", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": "$DEEPSEEK_API_KEY"},
-    {"name": "claude-opus", "model": "claude-opus-5-5", "base_url": "https://api.anthropic.com/v1", "api_key": "sk-ant-...", "protocol": "anthropic"}
+    {"name": "deepseek@官方", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": "sk-deepseek-密钥"},
+    {"name": "claude-opus", "model": "claude-opus-5-5", "base_url": "https://api.anthropic.com/v1", "api_key": "sk-ant-密钥", "protocol": "anthropic"}
   ]
 }
 ```
 
 `defaults` 里的字段对所有模型生效，单个模型里写了就覆盖。
 
+`ct secret` 故意不提供读出明文的命令，所以改配置就是重新 `ct secret import` 一份完整的。如果模型列表经常变，可以改用第二种方式：模型列表放在本地 `config.json`（已在 `.gitignore` 里），密钥字段只写引用，密钥本身用隐藏输入单独存：
+
+```bash
+ct secret set secret://model-inspect/deepseek     # 隐藏输入，敲一个字符显示一个 *
+```
+
+```json
+{"models": [{"name": "deepseek@官方", "model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1", "api_key": "secret://model-inspect/deepseek"}]}
+```
+
+配置来源的优先级：`--config`（`secret://` 引用或文件路径）> 环境变量 `MI_CONFIG` > 本地 `config.json`（存在时）> `secret://model-inspect`。
+
+临时测一个不在配置里的模型：
+
+```bash
+python run.py --base-url https://api.example.com/v1 --api-key secret://model-inspect/tmp --model gpt-5.5
+```
+
 | 字段 | 说明 | 默认 |
 | --- | --- | --- |
 | `name` | 报告里的名字，也是长期曲线的身份。同一个模型走不同渠道时起不同的名字（如 `gpt-5.5@中转A`） | 同 `model` |
 | `model` | 发给接口的模型 ID | 必填 |
 | `base_url` | 接口地址，写到 `/v1` 即可，会自动补 `/chat/completions` 或 `/messages` | 必填 |
-| `api_key` | 密钥。写成 `$环境变量名` 则从环境变量读取 | 必填 |
+| `api_key` | 密钥。整份配置存在 ct secret 里时直接写；放在本地文件时写 `secret://名字` 或 `secret://名字#字段` 引用 | 必填 |
 | `protocol` | `openai` 或 `anthropic`。不写时按地址判断 | 自动 |
 | `concurrency` | 同时发几道题 | 8 |
 | `timeout` | 单题超时秒数 | 180 |
@@ -137,7 +157,7 @@ run.py                执行测试并入库
 report.py             从数据库生成 report.html
 template.html         报告页面模板
 questions.json        题库
-config.example.json   配置示例
+config.example.json   配置格式示例（内容导入 ct secret，不要在这里填真密钥）
 data/results.db       结果数据库（运行后生成，不入库）
 report.html           报告（运行后生成，不入库）
 ```
