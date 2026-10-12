@@ -29,15 +29,29 @@ h2 { font-size: 16px; margin: 0 0 4px; }
 .sub { color: var(--ink2); margin: 0 0 16px; }
 .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-top: 16px; }
-.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
-.filters label { color: var(--ink2); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; position: sticky; top: 8px; z-index: 10; padding: 10px 16px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+.filters label, .pick summary { color: var(--ink2); }
+.pick { position: relative; }
+.pick summary { list-style: none; cursor: pointer; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; user-select: none; }
+.pick summary::-webkit-details-marker { display: none; }
+.pick summary b { color: var(--ink); }
+.pop { position: absolute; top: calc(100% + 6px); left: 0; width: 320px; max-height: 70vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.15); padding: 10px; }
+.pop input[type=text] { width: 100%; }
+.pop .acts { display: flex; gap: 6px; margin: 8px 0; }
+.opt { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
+.opt[hidden] { display: none; }
+.opt:hover { background: var(--wash); }
+.opt button { margin-left: auto; font-size: 11px; padding: 0 6px; visibility: hidden; }
+.opt:hover button, .opt button:focus { visibility: visible; }
 select, button, input[type=text] { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; }
 button { cursor: pointer; }
 button:hover { background: var(--wash); }
-.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--axis); cursor: pointer; user-select: none; background: var(--surface); }
-.chip.off { opacity: .45; }
-.chip i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 1px 10px 1px 6px; border-radius: 999px; border: 1px solid var(--grid); cursor: pointer; user-select: none; background: var(--surface); font-size: 12px; }
+.chip.off { opacity: .4; text-decoration: line-through; }
+.chip.hot { border-color: var(--ink2); background: var(--wash); }
+.sw { flex: none; vertical-align: middle; }
+td .sw { margin-right: 6px; }
 .scroll { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
@@ -50,13 +64,15 @@ tbody tr:hover { background: var(--wash); }
 .st { display: inline-flex; align-items: center; gap: 4px; }
 .st b { font-weight: 700; }
 .good b { color: var(--good); } .warn b { color: var(--warn); } .crit b { color: var(--crit); } .none b { color: var(--muted); }
-.key { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 #chart { position: relative; }
-#chart svg { display: block; width: 100%; height: 340px; }
+#svg { display: block; width: 100%; height: 360px; }
+#svg [data-n] { transition: opacity .12s; }
 #tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.15); font-size: 12px; display: none; min-width: 150px; z-index: 5; }
 #tip .t { color: var(--ink2); margin-bottom: 4px; }
-#tip .r { display: flex; align-items: center; gap: 6px; }
-#tip .r b { min-width: 34px; }
+#tip .r { display: flex; align-items: center; gap: 6px; padding: 0 4px; margin: 0 -4px; border-radius: 4px; white-space: nowrap; }
+#tip .r.hot { background: var(--wash); }
+#tip .r.hot span { color: var(--ink); }
+#tip .r b { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
 #tip .r span { color: var(--ink2); }
 .matrix td, .matrix th { padding: 3px 6px; text-align: center; }
 .matrix td.l, .matrix th.l { text-align: left; }
@@ -80,10 +96,16 @@ tbody tr:hover { background: var(--wash); }
     <label>时间范围 <select id="range">
       <option value="0">全部</option><option value="7">近 7 天</option><option value="30">近 30 天</option><option value="90">近 90 天</option>
     </select></label>
-    <label>指标 <select id="metric"></select></label>
-    <label>题库 <select id="suite"></select></label>
-    <button id="all">全选</button><button id="none">全不选</button>
-    <div class="legend" id="legend" style="flex-basis:100%"></div>
+    <label>题库版本 <select id="suite"></select></label>
+    <label>题集 <select id="metric"></select></label>
+    <details class="pick" id="pick">
+      <summary>模型 <b id="pickN"></b> ▾</summary>
+      <div class="pop">
+        <input type="text" id="pickQ" placeholder="搜索模型名，如 glm" aria-label="搜索模型名">
+        <div class="acts"><button id="all">全选</button><button id="none">全不选</button><button id="only">只选列出的</button></div>
+        <div id="pickList"></div>
+      </div>
+    </details>
   </div>
 
   <div class="card">
@@ -94,8 +116,9 @@ tbody tr:hover { background: var(--wash); }
 
   <div class="card">
     <h2 id="chartTitle">得分趋势</h2>
-    <p class="hint">横轴是执行时间，每个点是一次执行。鼠标移到图上查看该次各模型得分。</p>
-    <div id="chart"><svg id="svg" role="img" aria-label="各模型得分随时间变化的折线图"></svg><div id="tip"></div></div>
+    <p class="hint">横轴每一列是运行一次 run.py，这一次里测的所有模型画在同一列，分数挨得很近的点左右错开。颜色区分模型，形状区分 @ 后面的档位或渠道，空心表示那次不完整。鼠标移到图上看该次各模型得分（键盘 ← → 切换），移到图例上高亮单个模型，点击图例隐藏或显示。</p>
+    <div class="legend" id="legend"></div>
+    <div id="chart"><svg id="svg" role="img" tabindex="0" aria-label="各模型每次执行得分的折线图"></svg><div id="tip"></div></div>
   </div>
 
   <div class="card">
@@ -138,23 +161,47 @@ function svg(tag, attrs, text) {
   if (text != null) node.textContent = text;
   return node;
 }
-const ts = (r) => new Date(r.started_at.replace(" ", "T")).getTime();
 const fmt = (n, d = 1) => (n == null ? "–" : Number(n).toFixed(d));
 
-// 颜色跟模型走：按首次出现的顺序固定分配，前 8 个有色，其余用灰色
+// 颜色 × 形状一起标识模型，跟模型走、不随筛选变化：@ 前面相同的（同一模型的不同档位或渠道）共用颜色，用形状区分
+const SHAPES = [
+  "M-4.5,0a4.5,4.5 0 1,0 9,0a4.5,4.5 0 1,0 -9,0",                  // 圆
+  "M-4,-4h8v8h-8z",                                                 // 方
+  "M0,-5.6L5.6,0L0,5.6L-5.6,0z",                                    // 菱
+  "M0,-5.2L5.4,4.2H-5.4z",                                          // 上三角
+  "M0,5.2L5.4,-4.2H-5.4z",                                          // 下三角
+  "M-1.7,-5h3.4v3.3h3.3v3.4h-3.3v3.3h-3.4v-3.3h-3.3v-3.4h3.3z",     // 十字
+];
 const names = [...new Set(D.runs.map((r) => r.name))];
-const colorOf = (name) => { const i = names.indexOf(name); return i < 8 ? `var(${SLOTS[i]})` : "var(--muted)"; };
+const baseOf = (name) => name.split("@")[0];
+const bases = [...new Set(names.map(baseOf))];
+const LOOK = Object.fromEntries(names.map((n) => {
+  const b = bases.indexOf(baseOf(n)), k = names.filter((x) => baseOf(x) === baseOf(n)).indexOf(n);
+  return [n, {color: `var(${SLOTS[b % 8]})`, shape: SHAPES[(k + Math.floor(b / 8)) % SHAPES.length]}];
+}));
+const colorOf = (name) => LOOK[name].color;
+const partial = (r) => r.n_error / r.n_total > 0.1;
+function mark(name, hollow) {
+  return svg("path", {d: LOOK[name].shape, fill: hollow ? "var(--surface)" : colorOf(name),
+    stroke: hollow ? colorOf(name) : "var(--surface)", "stroke-width": hollow ? 2 : 1.5});
+}
+function swatch(name) {
+  const s = svg("svg", {class: "sw", viewBox: "-10 -7 20 14", width: 20, height: 14, "aria-hidden": "true"});
+  s.append(svg("line", {x1: -10, x2: 10, y1: 0, y2: 0, stroke: colorOf(name), "stroke-width": 2}), mark(name));
+  return s;
+}
 const state = { on: new Set(names), range: 0, metric: "score", suite: D.suite };
 
-function runsInView() {
+// 时间范围和题库版本圈定范围，模型筛选再从里面挑；横轴的列按前者定，筛模型时列不会跳
+function runsInScope() {
   const cut = state.range ? Date.now() - state.range * 864e5 : 0;
-  return D.runs.filter((r) => r.suite === state.suite && ts(r) >= cut && state.on.has(r.name));
+  return D.runs.filter((r) => r.suite === state.suite && new Date(r.batch.slice(0, 19).replace(" ", "T")).getTime() >= cut);
 }
 const valueOf = (r) => (state.metric === "score" ? r.score : r.cat_scores[state.metric]);
 const metricLabel = () => (state.metric === "score" ? "总分" : D.cats[state.metric]);
 
 function status(run, prev) {
-  if (run.n_error / run.n_total > 0.1) return ["warn", "⚠", "不完整"];
+  if (partial(run)) return ["warn", "⚠", "不完整"];
   if (!prev.length) return ["none", "○", "首测"];
   const base = prev.reduce((s, r) => s + r.score, 0) / prev.length;
   const p = Math.min(0.98, Math.max(0.02, base / 100));
@@ -174,12 +221,12 @@ function renderBoard(view) {
   for (const name of names.filter((n) => state.on.has(n))) {
     const mine = view.filter((r) => r.name === name);
     if (!mine.length) continue;
-    const run = mine[mine.length - 1], prev = mine.slice(0, -1).filter((r) => r.n_error / r.n_total <= 0.1);
+    const run = mine[mine.length - 1], prev = mine.slice(0, -1).filter((r) => !partial(r));
     const [cls, icon, label] = status(run, prev);
     const base = prev.length ? prev.reduce((s, r) => s + r.score, 0) / prev.length : null;
     const delta = base == null ? "–" : (run.score - base >= 0 ? "+" : "") + fmt(run.score - base);
     rows.push([run.score, el("tr", null,
-      el("td", null, el("span", {class: "key", style: `background:${colorOf(name)}`}), name),
+      el("td", null, swatch(name), name),
       el("td", {class: "l"}, el("span", {class: "st " + cls}, el("b", null, icon), label)),
       el("td", {class: "big"}, fmt(run.score)), el("td", null, delta),
       cats.map((c) => el("td", null, fmt(run.cat_scores[c], 0), el("span", {class: "mini", style: `width:${Math.max(2, run.cat_scores[c] || 0) * 0.4}px`}))),
@@ -191,56 +238,108 @@ function renderBoard(view) {
   if (!rows.length) $("board").replaceChildren(el("caption", {class: "empty"}, "所选范围内没有数据"));
 }
 
-function renderChart(view) {
-  const box = $("svg"), W = box.clientWidth || 900, H = 340, m = {l: 40, r: 120, t: 12, b: 28};
+function highlight(name) {
+  for (const n of $("svg").querySelectorAll("[data-n]")) n.setAttribute("opacity", name == null || n.dataset.n === name ? 1 : 0.15);
+  for (const c of $("legend").children) c.classList.toggle("hot", c.dataset.n === name);
+}
+
+function renderChart(scope, view) {
+  const box = $("svg"), tip = $("tip"), W = box.clientWidth || 900, H = 360;
   box.setAttribute("viewBox", `0 0 ${W} ${H}`);
   box.replaceChildren();
-  $("chartTitle").textContent = metricLabel() + "趋势";
-  const pts = view.map((r) => ({r, t: ts(r), v: valueOf(r)})).filter((p) => p.v != null);
+  tip.style.display = "none";
+  highlight(null);
+  box.onpointermove = box.onpointerleave = box.onfocus = box.onblur = box.onkeydown = null;
+  $("chartTitle").textContent = `${metricLabel()}趋势 · 题库 ${state.suite}`;
+  const keys = [...new Set(scope.map((r) => r.batch))].sort();   // 一次执行一列，等距排开
+  const last = new Map();                            // 同一次执行里同一个模型只留最后一条
+  for (const r of view) if (valueOf(r) != null) last.set(r.batch + "\n" + r.name, r);
+  const pts = [...last.values()].map((r) => ({r, i: keys.indexOf(r.batch), v: valueOf(r)}));
   if (!pts.length) { box.append(svg("text", {x: W / 2, y: H / 2, "text-anchor": "middle", fill: "var(--muted)"}, "所选范围内没有数据")); return; }
-  let t0 = Math.min(...pts.map((p) => p.t)), t1 = Math.max(...pts.map((p) => p.t));
-  if (t0 === t1) { t0 -= 36e5; t1 += 36e5; }
-  const lo = Math.max(0, Math.floor((Math.min(...pts.map((p) => p.v)) - 5) / 10) * 10);
-  const x = (t) => m.l + (t - t0) / (t1 - t0) * (W - m.l - m.r), y = (v) => m.t + (100 - v) / (100 - lo) * (H - m.t - m.b);
-  for (let v = lo; v <= 100; v += (100 - lo) > 50 ? 20 : 10) {
+  const shown = names.filter((n) => pts.some((p) => p.r.name === n));
+  const m = {l: 40, r: shown.length <= 4 ? 130 : 12, t: 14, b: 30}, step = (W - m.l - m.r) / keys.length;
+  let lo = Math.max(0, Math.floor((Math.min(...pts.map((p) => p.v)) - 5) / 10) * 10);
+  const tick = 100 - lo > 50 ? 20 : 10;
+  lo = Math.floor(lo / tick) * tick;                 // 刻度总能数到 100
+  const xc = (i) => m.l + (i + 0.5) * step, y = (v) => m.t + (100 - v) / (100 - lo) * (H - m.t - m.b);
+  for (let v = lo; v <= 100; v += tick) {
     box.append(svg("line", {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--grid)", "stroke-width": 1}));
     box.append(svg("text", {x: m.l - 8, y: y(v) + 4, "text-anchor": "end", fill: "var(--muted)", "font-size": 11}, v));
   }
   box.append(svg("line", {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1}));
-  const day = (t) => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-  for (let i = 0; i <= 4; i++) {
-    const t = t0 + (t1 - t0) * i / 4;
-    box.append(svg("text", {x: x(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle", fill: "var(--muted)", "font-size": 11}, day(t)));
+  const every = Math.ceil(84 / step);                // 列太密时隔几列标一个时间，最新一列总是标
+  keys.forEach((k, i) => {
+    box.append(svg("line", {x1: xc(i), x2: xc(i), y1: H - m.b, y2: H - m.b + 4, stroke: "var(--axis)", "stroke-width": 1}));
+    if ((keys.length - 1 - i) % every) return;
+    box.append(svg("text", {x: Math.max(m.l + 30, Math.min(W - 34, xc(i))), y: H - 9, "text-anchor": "middle", fill: "var(--muted)", "font-size": 11},
+      `${+k.slice(5, 7)}/${+k.slice(8, 10)} ${k.slice(11, 16)}`));
+  });
+
+  const cols = keys.map(() => []);
+  for (const p of pts) cols[p.i].push(p);
+  for (const col of cols) {                          // 同一列里纵向挨着（6px 内）的点排成一小排，免得叠成一个
+    col.sort((a, b) => b.v - a.v);
+    for (let s = 0, k = 1; k <= col.length; k++) {
+      if (k < col.length && y(col[k].v) - y(col[s].v) <= 6) continue;
+      const row = col.slice(s, k).sort((a, b) => names.indexOf(a.r.name) - names.indexOf(b.r.name)), gap = Math.min(11, step * 0.8 / row.length);
+      row.forEach((p, j) => { p.x = xc(p.i) + (j - (row.length - 1) / 2) * gap; p.y = y(p.v); });
+      s = k;
+    }
   }
-  const shown = names.filter((n) => pts.some((p) => p.r.name === n)), ends = [];
+  const lines = svg("g"), marks = svg("g"), ends = [];
   for (const name of shown) {
-    const mine = pts.filter((p) => p.r.name === name), c = colorOf(name);
-    box.append(svg("polyline", {points: mine.map((p) => `${x(p.t)},${y(p.v)}`).join(" "), fill: "none", stroke: c, "stroke-width": 2, "stroke-linejoin": "round"}));
-    for (const p of mine) box.append(svg("circle", {cx: x(p.t), cy: y(p.v), r: 4, fill: c, stroke: "var(--surface)", "stroke-width": 2}));
-    ends.push({name, y: y(mine[mine.length - 1].v), x: x(mine[mine.length - 1].t)});
+    const mine = pts.filter((p) => p.r.name === name).sort((a, b) => a.i - b.i);
+    if (mine.length > 1) lines.append(svg("polyline", {"data-n": name, points: mine.map((p) => `${p.x},${p.y}`).join(" "), fill: "none", stroke: colorOf(name), "stroke-width": 2, "stroke-linejoin": "round"}));
+    for (const p of mine) {
+      const dot = mark(name, partial(p.r));
+      dot.setAttribute("transform", `translate(${p.x},${p.y})`);
+      dot.setAttribute("data-n", name);
+      marks.append(dot);
+    }
+    ends.push({name, x: mine[mine.length - 1].x, y: mine[mine.length - 1].y});
   }
+  const hair = svg("line", {y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden"});
+  box.append(hair, lines, marks);
   if (shown.length <= 4) {                           // 序列少时在线尾直接标名字，并把重叠的标签错开
     ends.sort((a, b) => a.y - b.y);
     ends.forEach((e, i) => { if (i && e.y - ends[i - 1].y < 14) e.y = ends[i - 1].y + 14; });
-    for (const e of ends) box.append(svg("text", {x: e.x + 10, y: e.y + 4, fill: "var(--ink2)", "font-size": 12}, e.name.slice(0, 16)));
+    for (const e of ends) box.append(svg("text", {x: e.x + 10, y: e.y + 4, fill: "var(--ink2)", "font-size": 12}, e.name.slice(0, 18)));
   }
-  const hair = svg("line", {y1: m.t, y2: H - m.b, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden"});
-  box.append(hair);
-  const times = [...new Set(pts.map((p) => Math.round(p.t / 6e4)))].sort((a, b) => a - b);   // 同一分钟启动的算同一批
-  const tip = $("tip");
-  box.onpointermove = (ev) => {
-    const rect = box.getBoundingClientRect(), px = (ev.clientX - rect.left) * W / rect.width;
-    const near = times.reduce((a, b) => (Math.abs(x(b * 6e4) - px) < Math.abs(x(a * 6e4) - px) ? b : a));
-    const batch = pts.filter((p) => Math.round(p.t / 6e4) === near).sort((a, b) => b.v - a.v);
-    hair.setAttribute("x1", x(near * 6e4)); hair.setAttribute("x2", x(near * 6e4)); hair.setAttribute("visibility", "visible");
-    tip.replaceChildren(el("div", {class: "t"}, batch[0].r.started_at.slice(0, 16) + " · " + metricLabel()),
-      batch.map((p) => el("div", {class: "r"}, el("span", {class: "key", style: `background:${colorOf(p.r.name)};margin:0`}), el("b", null, fmt(p.v)), el("span", null, p.r.name + (p.r.note ? "（" + p.r.note + "）" : "")))));
+
+  let cur = -1, hot;
+  const show = (i, name) => {
+    if (i === cur && name === hot) return;
+    cur = i; hot = name;
+    const col = cols[i], notes = [...new Set(col.map((p) => p.r.note || ""))], shared = notes.length === 1 ? notes[0] : "";
+    hair.setAttribute("x1", xc(i)); hair.setAttribute("x2", xc(i)); hair.setAttribute("visibility", "visible");
+    highlight(name);
+    tip.replaceChildren(...[
+      el("div", {class: "t"}, `${keys[i].slice(0, 16)} · ${metricLabel()} · ${col.length} 个模型`),
+      shared && el("div", {class: "t"}, "备注：" + shared),
+      !col.length && el("div", {class: "t"}, "所选模型在这次执行里没有数据"),
+      ...col.map((p) => el("div", {class: "r" + (p.r.name === name ? " hot" : "")}, swatch(p.r.name), el("b", null, fmt(p.v)),
+        el("span", null, p.r.name + (partial(p.r) ? "（不完整）" : "") + (!shared && p.r.note ? "（" + p.r.note + "）" : "")))),
+    ].filter(Boolean));
     tip.style.display = "block";
-    const left = x(near * 6e4) * rect.width / W + 14;
-    tip.style.left = (left + tip.offsetWidth > rect.width ? left - tip.offsetWidth - 28 : left) + "px";
-    tip.style.top = "20px";
+    const rect = box.getBoundingClientRect(), left = xc(i) * rect.width / W + 16;
+    tip.style.left = (left + tip.offsetWidth > rect.width ? Math.max(0, left - tip.offsetWidth - 32) : left) + "px";
+    tip.style.top = "8px";
   };
-  box.onpointerleave = () => { tip.style.display = "none"; hair.setAttribute("visibility", "hidden"); };
+  const hide = () => { cur = -1; hot = undefined; tip.style.display = "none"; hair.setAttribute("visibility", "hidden"); highlight(null); };
+  box.onpointermove = (ev) => {
+    const rect = box.getBoundingClientRect(), px = (ev.clientX - rect.left) * W / rect.width, py = (ev.clientY - rect.top) * H / rect.height;
+    const i = Math.max(0, Math.min(keys.length - 1, Math.floor((px - m.l) / step)));
+    let near = null, best = 18 * 18;                 // 指针离哪个点最近（18px 内）就高亮哪个模型
+    for (const p of cols[i]) { const d = (p.x - px) ** 2 + (p.y - py) ** 2; if (d < best) { best = d; near = p.r.name; } }
+    show(i, near);
+  };
+  box.onpointerleave = box.onblur = hide;
+  box.onfocus = () => show(keys.length - 1, null);
+  box.onkeydown = (ev) => {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+    ev.preventDefault();
+    show(Math.max(0, Math.min(keys.length - 1, (cur < 0 ? keys.length - 1 : cur) + (ev.key === "ArrowLeft" ? -1 : 1))), null);
+  };
 }
 
 function renderMatrix(view) {
@@ -280,34 +379,52 @@ function renderHistory(view) {
   const head = el("tr", null, ["模型", "时间", "总分", "对/总", "出错", "用时", "均耗时", "输入 tokens", "输出 tokens"].map((h) => el("th", null, h)),
     el("th", {class: "l"}, "模型 ID / 接口回显"), el("th", {class: "l"}, "备注"));
   const rows = view.slice(-300).reverse().map((r) => el("tr", null,
-    el("td", null, el("span", {class: "key", style: `background:${colorOf(r.name)}`}), r.name), el("td", null, r.started_at.slice(0, 16)),
+    el("td", null, swatch(r.name), r.name), el("td", null, r.started_at.slice(0, 16)),
     el("td", null, fmt(r.score)), el("td", null, `${r.n_correct}/${r.n_total}`), el("td", null, r.n_error), el("td", null, r.duration_s == null ? "–" : fmt(r.duration_s, 0) + "s"),
     el("td", null, fmt(r.avg_latency_s) + "s"), el("td", null, r.tokens_in.toLocaleString()), el("td", null, r.tokens_out.toLocaleString()),
     el("td", {class: "l"}, r.model + (r.returned_model && r.returned_model !== r.model ? " → " + r.returned_model : "")), el("td", {class: "l"}, r.note || "")));
   $("history").replaceChildren(el("thead", null, head), el("tbody", null, rows));
 }
 
-function renderLegend() {
-  $("legend").replaceChildren(...names.map((n) => el("span", {class: "chip" + (state.on.has(n) ? "" : " off"), role: "button", tabindex: 0,
-    onclick: () => { state.on.has(n) ? state.on.delete(n) : state.on.add(n); render(); }}, el("i", {style: `background:${colorOf(n)}`}), n)));
+function toggle(name) { state.on.has(name) ? state.on.delete(name) : state.on.add(name); render(); }
+
+function renderLegend(scope) {
+  const have = names.filter((n) => scope.some((r) => r.name === n));
+  $("legend").replaceChildren(...have.map((n) => el("span", {class: "chip" + (state.on.has(n) ? "" : " off"), role: "button", tabindex: 0,
+    "data-n": n, "aria-pressed": state.on.has(n), title: state.on.has(n) ? "点击隐藏" : "点击显示",
+    onclick: () => toggle(n), onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); toggle(n); } },
+    onpointerenter: () => { if (state.on.has(n)) highlight(n); }, onpointerleave: () => highlight(null)}, swatch(n), n)));
+}
+
+function renderPicker() {
+  for (const row of $("pickList").children) row.firstChild.checked = state.on.has(row.dataset.n);
+  $("pickN").textContent = `${state.on.size}/${names.length}`;
 }
 
 function render() {
-  const view = runsInView();
-  renderLegend(); renderBoard(view); renderChart(view); renderMatrix(view); renderHistory(view);
+  const scope = runsInScope(), view = scope.filter((r) => state.on.has(r.name));
+  renderPicker(); renderLegend(scope); renderBoard(view); renderChart(scope, view); renderMatrix(view); renderHistory(view);
 }
 
 $("meta").textContent = `题库 ${D.suite} · ${D.questions.length} 题 · ${names.length} 个模型 · 累计 ${D.runs.length} 次执行 · 生成于 ${D.generated_at}`;
-$("metric").replaceChildren(el("option", {value: "score"}, "总分"), ...Object.entries(D.cats).map(([k, v]) => el("option", {value: k}, v)));
+$("metric").replaceChildren(el("option", {value: "score"}, "全部题目（总分）"), ...Object.entries(D.cats).map(([k, v]) => el("option", {value: k}, v)));
 const suites = [...new Set([D.suite, ...D.runs.map((r) => r.suite)])];
 $("suite").replaceChildren(...suites.map((s) => el("option", {value: s}, s)));
 $("range").onchange = (e) => { state.range = +e.target.value; render(); };
 $("metric").onchange = (e) => { state.metric = e.target.value; render(); };
 $("suite").onchange = (e) => { state.suite = e.target.value; render(); };
 $("onlyWrong").onchange = render;
-$("all").onclick = () => { state.on = new Set(names); render(); };
-$("none").onclick = () => { state.on.clear(); render(); };
-window.addEventListener("resize", () => renderChart(runsInView()));
+$("pickList").replaceChildren(...names.map((n) => el("label", {class: "opt", "data-n": n},
+  el("input", {type: "checkbox", onchange: (ev) => { ev.target.checked ? state.on.add(n) : state.on.delete(n); render(); }}), swatch(n), el("span", null, n),
+  el("button", {type: "button", onclick: (ev) => { ev.preventDefault(); state.on = new Set([n]); render(); }}, "只看它"))));
+const listed = () => [...$("pickList").children].filter((row) => !row.hidden).map((row) => row.dataset.n);   // 搜索框筛出来的那些
+$("pickQ").oninput = (e) => { const q = e.target.value.trim().toLowerCase(); for (const row of $("pickList").children) row.hidden = !row.dataset.n.toLowerCase().includes(q); };
+$("all").onclick = () => { listed().forEach((n) => state.on.add(n)); render(); };
+$("none").onclick = () => { listed().forEach((n) => state.on.delete(n)); render(); };
+$("only").onclick = () => { state.on = new Set(listed()); render(); };
+document.addEventListener("click", (ev) => { if (!$("pick").contains(ev.target)) $("pick").open = false; });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") $("pick").open = false; });
+window.addEventListener("resize", () => { const scope = runsInScope(); renderChart(scope, scope.filter((r) => state.on.has(r.name))); });
 render();
 </script>
 </body>

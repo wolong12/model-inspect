@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS runs (
   started_at TEXT, name TEXT, model TEXT, base_url TEXT, suite TEXT,
   score REAL, cat_scores TEXT, n_total INTEGER, n_correct INTEGER, n_error INTEGER,
   duration_s REAL, avg_latency_s REAL, tokens_in INTEGER, tokens_out INTEGER,
-  returned_model TEXT, note TEXT);
+  returned_model TEXT, note TEXT, batch TEXT);
 CREATE TABLE IF NOT EXISTS answers (
   run_id INTEGER, qid TEXT, cat TEXT, correct INTEGER, got TEXT, expected TEXT,
   latency_s REAL, tokens_in INTEGER, tokens_out INTEGER, error TEXT, reply TEXT);
@@ -362,13 +362,13 @@ def run_model(m, questions, limiter):
     }
 
 
-def save(db, run, suite, note):
+def save(db, run, suite, note, batch):
     cur = db.execute(
         "INSERT INTO runs (started_at,name,model,base_url,suite,score,cat_scores,n_total,n_correct,n_error,"
-        "duration_s,avg_latency_s,tokens_in,tokens_out,returned_model,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "duration_s,avg_latency_s,tokens_in,tokens_out,returned_model,note,batch) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (run["started_at"], run["name"], run["model"], run["base_url"], suite, run["score"],
          json.dumps(run["cat_scores"]), run["n_total"], run["n_correct"], run["n_error"], run["duration_s"],
-         run["avg_latency_s"], run["tokens_in"], run["tokens_out"], run["returned_model"], note))
+         run["avg_latency_s"], run["tokens_in"], run["tokens_out"], run["returned_model"], note, batch))
     db.executemany(
         "INSERT INTO answers VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         [(cur.lastrowid, r["qid"], r["cat"], r["correct"], r["got"], r["expected"], r["latency_s"],
@@ -381,6 +381,8 @@ def open_db():
     DB_PATH.parent.mkdir(exist_ok=True)
     db = sqlite3.connect(DB_PATH, check_same_thread=False)   # 写入由 lock 串行化
     db.executescript(SCHEMA)
+    if "batch" not in [c[1] for c in db.execute("PRAGMA table_info(runs)")]:   # 旧库补列；旧记录留空，报告里按时间推断
+        db.execute("ALTER TABLE runs ADD COLUMN batch TEXT")
     return db
 
 
@@ -413,6 +415,7 @@ def main():
     print(f"题库 {bank['suite']}，{len(questions)} 题；待测模型 {len(models)} 个：{', '.join(m['name'] for m in models)}")
 
     db, lock, failed = None if args.smoke else open_db(), threading.Lock(), []
+    batch = time.strftime("%Y-%m-%d %H:%M:%S")       # 同一次执行里的所有模型共用一个批次时间，报告里画在同一个点位
 
     def one(m, limiter):
         hits = limiter.hits
@@ -434,7 +437,7 @@ def main():
                 failed.append(run["name"])
                 print("    全部请求失败，本次不入库。")
             elif db:
-                print(f"    已入库，run #{save(db, run, bank['suite'], args.note)}")
+                print(f"    已入库，run #{save(db, run, bank['suite'], args.note, batch)}")
             elif args.smoke:
                 for r in run["rows"]:
                     print(f"    {r['qid']}: 期望 {r['expected']} 得到 {r['got'] or r['error'][:80]}")
