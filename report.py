@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("MI_DB") or ROOT / "data" / "results.db")   # MI_DB：测试时指到别处，不碰正式数据
+INCOMPLETE = 0.1                                     # 与 run.py 一致：出错的题超过这个比例的执行不计分
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
 
 
@@ -42,10 +43,13 @@ def collect():
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     runs = [dict(r) for r in db.execute("SELECT * FROM runs ORDER BY started_at, id")]
-    latest = {}                                      # 每个模型最近一次 run，只有它带完整回答
+    latest = {}                                      # 每个模型最近一次计分的 run，只有它带完整回答
     for r in runs:
         r["cat_scores"] = json.loads(r["cat_scores"])
-        latest[r["name"]] = r["id"]
+        if r["n_error"] > INCOMPLETE * r["n_total"]:  # 不完整的执行不计分（旧记录里存过分数的也不用）
+            r["score"], r["cat_scores"] = None, {}
+        else:
+            latest[r["name"]] = r["id"]
     assign_batches(runs)
     details = {}
     for r in runs:
@@ -54,7 +58,7 @@ def collect():
         r["bits"] = "".join(
             "-" if q["id"] not in rows else "e" if rows[q["id"]]["error"] else str(rows[q["id"]]["correct"])
             for q in questions)
-        if latest[r["name"]] == r["id"]:
+        if latest.get(r["name"]) == r["id"]:
             details[r["id"]] = {qid: {"got": a["got"], "error": a["error"], "reply": a["reply"][-1500:],
                                       "latency_s": a["latency_s"]} for qid, a in rows.items()}
     db.close()

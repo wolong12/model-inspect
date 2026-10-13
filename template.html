@@ -110,13 +110,13 @@ tbody tr:hover { background: var(--wash); }
 
   <div class="card">
     <h2>最新成绩</h2>
-    <p class="hint">每个模型最近一次执行。「对比历史」= 本次得分 − 此前各次的平均分；波动超过抽样误差（约 2 个标准误，最少 5 分）才标记上升/下降。出错或超时的题按答错计，出错超过 10% 标记为不完整。</p>
+    <p class="hint">每个模型最近一次计分的执行。「对比历史」= 本次得分 − 此前各次的平均分；波动超过抽样误差（约 2 个标准误，最少 5 分）才标记上升/下降。出错或超时的题按答错计；出错的题超过 10% 的那次算不完整，不计分，不进入这里和趋势图，只在执行记录里留一条。</p>
     <div class="scroll"><table id="board"></table></div>
   </div>
 
   <div class="card">
     <h2 id="chartTitle">得分趋势</h2>
-    <p class="hint">横轴每一列是运行一次 run.py，这一次里测的所有模型画在同一列，分数挨得很近的点左右错开。颜色区分模型，形状区分 @ 后面的档位或渠道，空心表示那次不完整。鼠标移到图上看该次各模型得分（键盘 ← → 切换），移到图例上高亮单个模型，点击图例隐藏或显示。</p>
+    <p class="hint">横轴每一列是运行一次 run.py，这一次里测的所有模型画在同一列，分数挨得很近的点左右错开。颜色区分模型，形状区分 @ 后面的档位或渠道；不完整的执行不计分，不画点。鼠标移到图上看该次各模型得分（键盘 ← → 切换），移到图例上高亮单个模型，点击图例隐藏或显示。</p>
     <div class="legend" id="legend"></div>
     <div id="chart"><svg id="svg" role="img" tabindex="0" aria-label="各模型每次执行得分的折线图"></svg><div id="tip"></div></div>
   </div>
@@ -180,10 +180,10 @@ const LOOK = Object.fromEntries(names.map((n) => {
   return [n, {color: `var(${SLOTS[b % 8]})`, shape: SHAPES[(k + Math.floor(b / 8)) % SHAPES.length]}];
 }));
 const colorOf = (name) => LOOK[name].color;
-const partial = (r) => r.n_error / r.n_total > 0.1;
-function mark(name, hollow) {
-  return svg("path", {d: LOOK[name].shape, fill: hollow ? "var(--surface)" : colorOf(name),
-    stroke: hollow ? colorOf(name) : "var(--surface)", "stroke-width": hollow ? 2 : 1.5});
+const partial = (r) => r.score == null;               // 不完整的执行：出错太多，没有分数
+const when = (r) => `${+r.started_at.slice(5, 7)}/${+r.started_at.slice(8, 10)} ${r.started_at.slice(11, 16)}`;
+function mark(name) {
+  return svg("path", {d: LOOK[name].shape, fill: colorOf(name), stroke: "var(--surface)", "stroke-width": 1.5});
 }
 function swatch(name) {
   const s = svg("svg", {class: "sw", viewBox: "-10 -7 20 14", width: 20, height: 14, "aria-hidden": "true"});
@@ -201,7 +201,6 @@ const valueOf = (r) => (state.metric === "score" ? r.score : r.cat_scores[state.
 const metricLabel = () => (state.metric === "score" ? "总分" : D.cats[state.metric]);
 
 function status(run, prev) {
-  if (partial(run)) return ["warn", "⚠", "不完整"];
   if (!prev.length) return ["none", "○", "首测"];
   const base = prev.reduce((s, r) => s + r.score, 0) / prev.length;
   const p = Math.min(0.98, Math.max(0.02, base / 100));
@@ -219,15 +218,23 @@ function renderBoard(view) {
     el("th", null, "输出 tokens"), el("th", null, "次数"), el("th", null, "最近执行"));
   const rows = [];
   for (const name of names.filter((n) => state.on.has(n))) {
-    const mine = view.filter((r) => r.name === name);
-    if (!mine.length) continue;
-    const run = mine[mine.length - 1], prev = mine.slice(0, -1).filter((r) => !partial(r));
+    const all = view.filter((r) => r.name === name), mine = all.filter((r) => !partial(r));
+    if (!all.length) continue;
+    const newest = all[all.length - 1];
+    const broken = partial(newest) ? `最近一次（${when(newest)}）不完整：${newest.n_error}/${newest.n_total} 题出错，未计分` : "";
+    if (!mine.length) {                              // 还没有一次完整的执行
+      rows.push([-1, el("tr", null, el("td", null, swatch(name), name),
+        el("td", {class: "l", colspan: cats.length + 9}, el("span", {class: "st warn"}, el("b", null, "⚠"), broken)))]);
+      continue;
+    }
+    const run = mine[mine.length - 1], prev = mine.slice(0, -1);
     const [cls, icon, label] = status(run, prev);
     const base = prev.length ? prev.reduce((s, r) => s + r.score, 0) / prev.length : null;
     const delta = base == null ? "–" : (run.score - base >= 0 ? "+" : "") + fmt(run.score - base);
     rows.push([run.score, el("tr", null,
       el("td", null, swatch(name), name),
-      el("td", {class: "l"}, el("span", {class: "st " + cls}, el("b", null, icon), label)),
+      el("td", {class: "l"}, el("span", {class: "st " + cls}, el("b", null, icon), label),
+        broken && el("span", {class: "st warn", title: broken, style: "margin-left:8px"}, el("b", null, "⚠"))),
       el("td", {class: "big"}, fmt(run.score)), el("td", null, delta),
       cats.map((c) => el("td", null, fmt(run.cat_scores[c], 0), el("span", {class: "mini", style: `width:${Math.max(2, run.cat_scores[c] || 0) * 0.4}px`}))),
       el("td", null, `${run.n_correct}/${run.n_total}`), el("td", null, run.n_error), el("td", null, fmt(run.avg_latency_s) + "s"),
@@ -291,7 +298,7 @@ function renderChart(scope, view) {
     const mine = pts.filter((p) => p.r.name === name).sort((a, b) => a.i - b.i);
     if (mine.length > 1) lines.append(svg("polyline", {"data-n": name, points: mine.map((p) => `${p.x},${p.y}`).join(" "), fill: "none", stroke: colorOf(name), "stroke-width": 2, "stroke-linejoin": "round"}));
     for (const p of mine) {
-      const dot = mark(name, partial(p.r));
+      const dot = mark(name);
       dot.setAttribute("transform", `translate(${p.x},${p.y})`);
       dot.setAttribute("data-n", name);
       marks.append(dot);
@@ -311,14 +318,17 @@ function renderChart(scope, view) {
     if (i === cur && name === hot) return;
     cur = i; hot = name;
     const col = cols[i], notes = [...new Set(col.map((p) => p.r.note || ""))], shared = notes.length === 1 ? notes[0] : "";
+    const unscored = view.filter((r) => r.batch === keys[i] && partial(r));
     hair.setAttribute("x1", xc(i)); hair.setAttribute("x2", xc(i)); hair.setAttribute("visibility", "visible");
     highlight(name);
     tip.replaceChildren(...[
       el("div", {class: "t"}, `${keys[i].slice(0, 16)} · ${metricLabel()} · ${col.length} 个模型`),
       shared && el("div", {class: "t"}, "备注：" + shared),
-      !col.length && el("div", {class: "t"}, "所选模型在这次执行里没有数据"),
+      !col.length && !unscored.length && el("div", {class: "t"}, "所选模型在这次执行里没有数据"),
       ...col.map((p) => el("div", {class: "r" + (p.r.name === name ? " hot" : "")}, swatch(p.r.name), el("b", null, fmt(p.v)),
-        el("span", null, p.r.name + (partial(p.r) ? "（不完整）" : "") + (!shared && p.r.note ? "（" + p.r.note + "）" : "")))),
+        el("span", null, p.r.name + (!shared && p.r.note ? "（" + p.r.note + "）" : "")))),
+      ...unscored.map((r) => el("div", {class: "r"}, swatch(r.name), el("b", null, "–"),
+        el("span", null, `${r.name}（不完整，${r.n_error}/${r.n_total} 题出错，未计分）`))),
     ].filter(Boolean));
     tip.style.display = "block";
     const rect = box.getBoundingClientRect(), left = xc(i) * rect.width / W + 16;
@@ -380,7 +390,7 @@ function renderHistory(view) {
     el("th", {class: "l"}, "模型 ID / 接口回显"), el("th", {class: "l"}, "备注"));
   const rows = view.slice(-300).reverse().map((r) => el("tr", null,
     el("td", null, swatch(r.name), r.name), el("td", null, r.started_at.slice(0, 16)),
-    el("td", null, fmt(r.score)), el("td", null, `${r.n_correct}/${r.n_total}`), el("td", null, r.n_error), el("td", null, r.duration_s == null ? "–" : fmt(r.duration_s, 0) + "s"),
+    el("td", null, partial(r) ? "未计分" : fmt(r.score)), el("td", null, `${r.n_correct}/${r.n_total}`), el("td", null, r.n_error), el("td", null, r.duration_s == null ? "–" : fmt(r.duration_s, 0) + "s"),
     el("td", null, fmt(r.avg_latency_s) + "s"), el("td", null, r.tokens_in.toLocaleString()), el("td", null, r.tokens_out.toLocaleString()),
     el("td", {class: "l"}, r.model + (r.returned_model && r.returned_model !== r.model ? " → " + r.returned_model : "")), el("td", {class: "l"}, r.note || "")));
   $("history").replaceChildren(el("thead", null, head), el("tbody", null, rows));
@@ -402,8 +412,8 @@ function renderPicker() {
 }
 
 function render() {
-  const scope = runsInScope(), view = scope.filter((r) => state.on.has(r.name));
-  renderPicker(); renderLegend(scope); renderBoard(view); renderChart(scope, view); renderMatrix(view); renderHistory(view);
+  const scope = runsInScope(), view = scope.filter((r) => state.on.has(r.name)), scored = view.filter((r) => !partial(r));
+  renderPicker(); renderLegend(scope); renderBoard(view); renderChart(scope, view); renderMatrix(scored); renderHistory(view);
 }
 
 $("meta").textContent = `题库 ${D.suite} · ${D.questions.length} 题 · ${names.length} 个模型 · 累计 ${D.runs.length} 次执行 · 生成于 ${D.generated_at}`;

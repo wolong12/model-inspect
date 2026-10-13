@@ -7,9 +7,13 @@
     python run.py --smoke         # 每个模型只问 3 题验证连通，不入库
 """
 import argparse
+import collections
+import http.client
 import json
 import os
+import random
 import re
+import socket
 import sqlite3
 import sys
 import threading
@@ -23,7 +27,8 @@ ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("MI_DB") or ROOT / "data" / "results.db")   # MI_DB：测试时指到别处，不碰正式数据
 SECRET_CONFIG = "secret://model-inspect"
 DEFAULTS = {"protocol": "", "concurrency": 8, "timeout": 180, "budget": 600, "max_tokens": 8192,
-            "rpm": 0, "stream": True, "params": {}}
+            "rpm": 0, "stream": True, "retries": 4, "rounds": 2, "params": {}}
+INCOMPLETE = 0.1                                     # 出错的题超过这个比例，这次执行算不完整，不计分（report.py 里有同一个值）
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
 SYSTEM = "你在参加一次标准化测验。可以先简要推理，但最后必须单独一行按要求的格式给出答案。"
 
@@ -153,6 +158,10 @@ def is_anthropic(m):
     return m["protocol"] == "anthropic" or (not m["protocol"] and ("anthropic.com" in url or url.endswith("/messages")))
 
 
+class Transient(RuntimeError):
+    """换个时间再试可能就好的失败：限流、5xx、网络抖动、流中断、空回答。"""
+
+
 def read_stream(resp):
     """把 SSE 流拼回与非流式相同的结构（OpenAI 与 Anthropic 两种事件都认）。"""
     text, usage, model = [], {}, ""
@@ -162,7 +171,7 @@ def read_stream(resp):
             continue
         ev = json.loads(line[5:])
         if ev.get("error"):
-            raise RuntimeError("流式返回错误：" + json.dumps(ev["error"], ensure_ascii=False)[:300])
+            raise Transient("流式返回错误：" + json.dumps(ev["error"], ensure_ascii=False)[:300])
         msg = ev.get("message") or {}                # Anthropic message_start
         model = model or ev.get("model") or msg.get("model") or ""
         usage.update({k: v for k, v in (ev.get("usage") or msg.get("usage") or {}).items() if v})
@@ -172,12 +181,13 @@ def read_stream(resp):
 
 
 class Limiter:
-    """一个账号（接口地址 + 密钥）一个：限制同时在途的请求数和每分钟请求数，遇到 429 自动降速。"""
+    """一个账号（接口地址 + 密钥）一个：限制同时在途的请求数和每分钟请求数，遇到 429 自动降速，之后慢慢恢复。"""
 
     def __init__(self, concurrency, rpm):
-        self.limit, self.busy, self.gap = concurrency, 0, 60 / rpm if rpm else 0
+        self.limit = self.cap = concurrency          # cap 是配置的并发上限，limit 是当前实际用的
+        self.busy, self.gap = 0, 60 / rpm if rpm else 0
         self.next_at = self.cut_at = 0.0
-        self.hits = 0                                # 被限流的次数
+        self.hits = self.streak = 0                  # 被限流的次数；上次限流后连续成功的次数
         self.cv = threading.Condition()
 
     def __enter__(self):
@@ -194,11 +204,19 @@ class Limiter:
             self.busy -= 1
             self.cv.notify_all()
 
+    def ok(self):
+        """一次请求成功。连续成功满「当前并发 × 2」次就把并发加回 1，直到配置的上限，免得一次限流拖慢后面所有题。"""
+        with self.cv:
+            self.streak += 1
+            if self.limit < self.cap and self.streak >= 2 * self.limit:
+                self.limit, self.streak = self.limit + 1, 0
+                self.cv.notify_all()
+
     def slow_down(self, wait):
         """收到 429：所有请求暂停 wait 秒；并发减半（10 秒内只减一次，避免一批 429 把并发直接砍到 1）。"""
         with self.cv:
             now = time.time()
-            self.hits += 1
+            self.hits, self.streak = self.hits + 1, 0
             self.next_at = max(self.next_at, now + wait)
             if now - self.cut_at > 10:
                 self.limit, self.cut_at = max(1, self.limit // 2), now
@@ -228,40 +246,50 @@ def call_model(m, prompt, limiter, deadline):
     req = urllib.request.Request(url, json.dumps(body).encode(), headers)
     fails = limited = 0
     while True:
+        wait, slow = None, False
         try:
             with limiter:
                 t0 = time.time()
                 with urllib.request.urlopen(req, timeout=m["timeout"]) as resp:
                     data = read_stream(resp) if m["stream"] else json.loads(resp.read().decode("utf-8", "replace"))
                 took = time.time() - t0
-            break
+            if "choices" in data:
+                content = ((data["choices"] or [{}])[0].get("message") or {}).get("content") or ""
+            else:
+                content = data.get("content") or ""
+            if isinstance(content, list):
+                content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
+            if content.strip():
+                limiter.ok()
+                break
+            fails, why = fails + 1, "接口没有返回回答：" + json.dumps(data, ensure_ascii=False)[:300]
         except urllib.error.HTTPError as e:
-            detail = f"HTTP {e.code}: " + e.read().decode("utf-8", "replace")[:300]
-            if e.code == 429:                        # 限流不算失败次数：降速后重试，直到预算用完
+            why = f"HTTP {e.code}: " + e.read().decode("utf-8", "replace")[:300]
+            after = e.headers.get("Retry-After", "")
+            if e.code == 429:                        # 限流不算失败次数：整个账号降速后重试，直到时间用完
                 limited += 1
-                after = e.headers.get("Retry-After", "")
                 wait = min(60, int(after) if after.isdigit() else 5 * 2 ** min(limited, 3))
-                if limited > 8 or time.time() + wait > deadline:
-                    raise RuntimeError(detail) from None
-                limiter.slow_down(wait)
+                if time.time() + wait > deadline:
+                    raise Transient(why) from None
+                limiter.slow_down(wait)              # 下一次进 limiter 时会等够这段时间
                 continue
-            fails += 1
-            if e.code not in (408, 500, 502, 503, 504, 529) or fails == 3:
-                raise RuntimeError(detail) from None
-        except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError) as e:
-            fails += 1
-            if fails == 3:
-                raise RuntimeError(f"{type(e).__name__}: {e}") from None
-        time.sleep(2 * fails)
+            if e.code not in (408, 409, 425) and e.code < 500:
+                raise RuntimeError(why) from None    # 400/401/403/404 这类重试也没用
+            fails += 1                               # 5xx 全部重试，包括网关的 520–529
+            if after.isdigit():
+                wait = min(60, int(after))
+        except Transient as e:
+            fails, why = fails + 1, str(e)
+        except (OSError, http.client.HTTPException, ValueError) as e:   # 连不上、超时、流读到一半断开、返回的不是 JSON
+            slow = isinstance(e, socket.timeout) or isinstance(getattr(e, "reason", None), socket.timeout)
+            fails += 2 if slow else 1                # 超时多半是模型自己慢：重试次数减半，用完后也不进重试轮
+            why = f"{type(e).__name__}: {e}"[:300]
+        if wait is None:
+            wait = min(30, 2 ** fails) + random.random()   # 2、4、8、16 秒…，带一点随机错开并发的请求
+        if fails > m["retries"] or time.time() + wait > deadline:
+            raise (RuntimeError if slow else Transient)(why) from None
+        time.sleep(wait)
     usage = data.get("usage") or {}
-    if "choices" in data:
-        content = (data["choices"][0].get("message") or {}).get("content") or ""
-    else:
-        content = data.get("content") or ""
-    if isinstance(content, list):
-        content = "".join(p.get("text", "") for p in content if isinstance(p, dict))
-    if not content.strip():
-        raise RuntimeError("接口没有返回回答：" + json.dumps(data, ensure_ascii=False)[:300])
     return (content, usage.get("prompt_tokens", usage.get("input_tokens", 0)) or 0,
             usage.get("completion_tokens", usage.get("output_tokens", 0)) or 0, data.get("model", ""), took)
 
@@ -311,53 +339,78 @@ def grade(q, reply):
 
 
 # ---------- 执行 ----------
-def run_model(m, questions, limiter):
-    started = time.time()
-    deadline = started + m["budget"]
-    seen = {"ok": 0, "bad": 0, "why": ""}
+def run_model(m, questions, limiter, log=print):
+    """第一轮问全部题目；之后最多 rounds 轮，只重问因为限流、5xx、网络这类原因没答上的题。"""
+    started, hits = time.time(), limiter.hits
+    cap = started + 2 * m["budget"]                  # 重试轮最多再用一份预算
+    rows, redo = {}, set()
+    seen = {"ok": 0, "bad": 0, "why": "", "retry": False}
 
-    def ask(q):
-        row = {"qid": q["id"], "cat": q["cat"], "expected": q["answer"], "correct": 0, "got": "",
-               "latency_s": 0.0, "tokens_in": 0, "tokens_out": 0, "error": "", "reply": "", "returned_model": ""}
-        if time.time() > deadline:
-            row["error"] = f"超出 {m['budget']} 秒预算，未作答"
-            return row
-        if not seen["ok"] and seen["bad"] >= 8:     # 开头连续失败（密钥错、地址不通）就不再空耗
-            row["error"] = "前 8 次请求全部失败，已中止：" + seen["why"]
-            return row
-        try:
-            reply, row["tokens_in"], row["tokens_out"], row["returned_model"], took = call_model(
-                m, build_prompt(q), limiter, deadline)
-            row["latency_s"] = round(took, 2)        # 只算成功那一次请求，不含排队和重试等待
-            ok, row["got"] = grade(q, reply)
-            row["correct"], row["reply"] = int(ok), reply[-4000:]
-        except Exception as e:                       # 单题失败不影响其余题目
-            row["error"] = str(e)[:500]
-        seen["bad" if row["error"] else "ok"] += 1
-        seen["why"] = row["error"] or seen["why"]
-        return row
+    def one_round(todo, deadline, late):
+        seen["bad"] = 0                              # 成功数跨轮累计：只要答上过一题，后面的轮次就不会被下面的「连续失败」中止
 
-    mixed = [q for k in range(7) for q in questions[k::7]]   # 各类别穿插着问，超预算时不会只砍掉排在后面的类别
-    with ThreadPoolExecutor(m["concurrency"]) as pool:
-        done = {r["qid"]: r for r in pool.map(ask, mixed)}
-    rows = [done[q["id"]] for q in questions]
+        def ask(q):
+            # retry：这题值得下一轮再问；unasked：时间不够没问到（只在本轮确实遇到过限流或可重试错误时才补问）
+            row = {"qid": q["id"], "cat": q["cat"], "expected": q["answer"], "correct": 0, "got": "", "latency_s": 0.0,
+                   "tokens_in": 0, "tokens_out": 0, "error": "", "reply": "", "returned_model": "", "retry": False, "unasked": False}
+            if time.time() > deadline:
+                row["error"], row["unasked"] = late, True
+                return row
+            if not seen["ok"] and seen["bad"] >= 8:  # 一题都没答上过、本轮又连续失败（密钥错、地址不通）就不再空耗
+                row["error"], row["retry"] = "前 8 次请求全部失败，已中止：" + seen["why"], seen["retry"]
+                return row
+            try:
+                reply, row["tokens_in"], row["tokens_out"], row["returned_model"], took = call_model(
+                    m, build_prompt(q), limiter, deadline)
+                row["latency_s"] = round(took, 2)    # 只算成功那一次请求，不含排队和重试等待
+                ok, row["got"] = grade(q, reply)
+                row["correct"], row["reply"] = int(ok), reply[-4000:]
+            except Exception as e:                   # 单题失败不影响其余题目
+                row["error"], row["retry"] = str(e)[:500], isinstance(e, Transient)
+            seen["bad" if row["error"] else "ok"] += 1
+            if row["error"]:
+                seen["why"], seen["retry"] = row["error"], row["retry"]
+            return row
+
+        mixed = [q for k in range(7) for q in todo[k::7]]   # 各类别穿插着问，超预算时不会只砍掉排在后面的类别
+        with ThreadPoolExecutor(m["concurrency"]) as pool:
+            for row in pool.map(ask, mixed):
+                rows[row["qid"]] = row
+
+    todo, deadline, late, n = questions, started + m["budget"], f"超出 {m['budget']} 秒预算，未作答", 0
+    while True:
+        one_round(todo, deadline, late)
+        shaky = limiter.hits > hits or any(r["retry"] for r in rows.values())
+        todo = [q for q in questions if rows[q["id"]]["retry"] or (shaky and rows[q["id"]]["unasked"])]
+        wait = min(60, 15 * (n + 1))                 # 轮与轮之间等一会儿，让限流窗口或上游故障过去
+        if not todo or n >= m["rounds"] or time.time() + wait >= cap:
+            break
+        n += 1
+        redo.update(q["id"] for q in todo)
+        log(f"    [{m['name']}] {len(todo)} 题因限流或接口错误没答上，{wait} 秒后开始第 {n} 轮重试")
+        time.sleep(wait)
+        deadline, late = cap, f"超出 {2 * m['budget']} 秒（含重试）预算，未作答"
+
+    rows = [rows[q["id"]] for q in questions]
     answered = [r for r in rows if not r["error"]]
+    scored = len(rows) - len(answered) <= INCOMPLETE * len(rows)   # 出错太多就不计分：分数低是接口的问题，不是模型的
     cat_scores = {}
     for cat in CATS:
         sub = [r for r in rows if r["cat"] == cat]
-        if sub:
+        if sub and scored:
             cat_scores[cat] = round(100 * sum(r["correct"] for r in sub) / len(sub), 1)
     return {
         "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(started)),
         "name": m["name"], "model": m["model"], "base_url": m["base_url"],
         # 总分 = 全部题目的正确率；出错和超时的题按答错计
-        "score": round(100 * sum(r["correct"] for r in rows) / len(rows), 1),
+        "score": round(100 * sum(r["correct"] for r in rows) / len(rows), 1) if scored else None,
         "cat_scores": cat_scores, "n_total": len(rows), "n_correct": sum(r["correct"] for r in rows),
         "n_error": len(rows) - len(answered), "duration_s": round(time.time() - started, 1),
         "avg_latency_s": round(sum(r["latency_s"] for r in answered) / len(answered), 2) if answered else 0,
         "tokens_in": sum(r["tokens_in"] for r in rows), "tokens_out": sum(r["tokens_out"] for r in rows),
         "returned_model": next((r["returned_model"] for r in rows if r["returned_model"]), ""),
         "limit_hits": limiter.hits, "limit_now": limiter.limit,
+        "rounds": n, "recovered": sum(1 for r in rows if r["qid"] in redo and not r["error"]),
         "rows": rows,
     }
 
@@ -417,26 +470,35 @@ def main():
     db, lock, failed = None if args.smoke else open_db(), threading.Lock(), []
     batch = time.strftime("%Y-%m-%d %H:%M:%S")       # 同一次执行里的所有模型共用一个批次时间，报告里画在同一个点位
 
+    def say(text):
+        with lock:
+            print(text, flush=True)
+
     def one(m, limiter):
         hits = limiter.hits
-        with lock:
-            print(f"[{time.strftime('%H:%M:%S')}] 开始 {m['name']}", flush=True)
-        run = run_model(m, questions, limiter)
+        say(f"[{time.strftime('%H:%M:%S')}] 开始 {m['name']}")
+        run = run_model(m, questions, limiter, say)
         with lock:
             cats = "  ".join(f"{CATS[c]} {v:.0f}" for c, v in run["cat_scores"].items())
-            print(f"\n[{run['name']}] 总分 {run['score']:.1f}  对 {run['n_correct']}/{run['n_total']}  "
+            head = f"总分 {run['score']:.1f}" if run["score"] is not None else "不完整，本次不计分"
+            print(f"\n[{run['name']}] {head}  对 {run['n_correct']}/{run['n_total']}  "
                   f"出错 {run['n_error']}  用时 {run['duration_s']:.0f}s  平均 {run['avg_latency_s']:.1f}s/题  "
-                  f"输出 {run['tokens_out']} tokens\n    {cats}")
+                  f"输出 {run['tokens_out']} tokens" + (f"\n    {cats}" if cats else ""))
+            if run["rounds"]:
+                print(f"    重试了 {run['rounds']} 轮，补回 {run['recovered']} 题")
             if run["limit_hits"] > hits:
                 print(f"    被限流 {run['limit_hits'] - hits} 次，已自动降速，当前并发 {run['limit_now']}"
                       f"（可在配置里调低 concurrency 或设置 rpm）")
-            errors = [r for r in run["rows"] if r["error"]]
-            if errors:
-                print(f"    首个错误：{errors[0]['error'][:200]}")
+            kinds = collections.Counter(re.sub(r"\d{5,}", "#", r["error"])[:120] for r in run["rows"] if r["error"])
+            for why, count in kinds.most_common(3):
+                print(f"    {count} 题出错：{why}")
             if run["n_error"] == run["n_total"]:
                 failed.append(run["name"])
                 print("    全部请求失败，本次不入库。")
             elif db:
+                if run["score"] is None:
+                    failed.append(run["name"])
+                    print(f"    出错的题超过 {INCOMPLETE:.0%}，只记一条不计分的执行记录，不进入成绩和趋势。")
                 print(f"    已入库，run #{save(db, run, bank['suite'], args.note, batch)}")
             elif args.smoke:
                 for r in run["rows"]:
@@ -451,7 +513,8 @@ def main():
     def account(group):
         limiter = Limiter(group[0]["concurrency"], group[0]["rpm"])
         for m in group:
-            limiter.limit = min(limiter.limit, m["concurrency"]) if limiter.hits else m["concurrency"]
+            limiter.cap = m["concurrency"]           # 之前被限流降下来的并发沿用到这个模型，之后再慢慢恢复
+            limiter.limit = min(limiter.limit, limiter.cap) if limiter.hits else limiter.cap
             one(m, limiter)
 
     with ThreadPoolExecutor(len(accounts)) as pool:
