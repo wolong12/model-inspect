@@ -23,13 +23,48 @@ python run.py gpt-5.5 deepseek-chat     # 只测指定模型（按 name）
 
 然后用浏览器直接打开 `report.html`。
 
-要长期观察，就定时执行，比如每天 9 点：
+要长期观察，就让它一直跑。`loop.py` 每 2 小时执行一次 `run.py`，一直跑到被停掉：
 
-```cron
-0 9 * * * cd /path/to/model-inspect && python3 run.py >> data/cron.log 2>&1
+```bash
+python loop.py                          # 立刻跑第一轮，之后每 2 小时一轮（前台，Ctrl-C 停）
+python loop.py --every 30m              # 换个间隔：90s / 30m / 2h / 1d
+python loop.py gpt-5.5 --budget 900     # 其余参数原样传给 run.py
+
+nohup python3 loop.py >> data/loop.log 2>&1 &   # 放到后台；tail -f data/loop.log 看进度
+pkill -f loop.py                                # 停掉（正在跑的这一轮一起停，已测完的模型已入库）
 ```
 
-注意：`ct secret` 依赖系统 keyring。Linux 上 cron 没有登录会话时 keyring 可能读不到，这一点还没有实际验证过；读取失败时脚本会以非零状态退出并说明原因。
+- 间隔按两轮的**开始时间**算。某一轮跑得比间隔还久，结束后马上开始下一轮，不会叠着跑。
+- 某一轮有模型失败或不完整，只在日志里记一笔，下一轮照常；配置读不到之类的错误也一样，每轮重试一次。
+- 同一个库同时只允许一个 `loop.py`（`data/loop.lock`），重复启动会直接退出。
+- 每轮都是重新启动 `run.py`，所以改了配置、题库或代码，下一轮自动生效，不用重启 `loop.py`。
+- 2 小时一轮就是每天 12 轮，token 消耗是每天跑一次的 12 倍。
+
+要开机自启、崩了自动拉起，用 systemd 用户服务（`~/.config/systemd/user/model-inspect.service`）：
+
+```ini
+[Unit]
+Description=model-inspect 持续体检
+
+[Service]
+WorkingDirectory=/path/to/model-inspect
+ExecStart=/usr/bin/python3 loop.py
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+loginctl enable-linger $USER            # 退出登录后服务继续跑
+systemctl --user enable --now model-inspect
+journalctl --user -u model-inspect -f   # 看日志
+```
+
+只想每天跑一次的话用 cron 也行：`0 9 * * * cd /path/to/model-inspect && python3 run.py >> data/cron.log 2>&1`。
+
+注意：`ct secret` 依赖系统 keyring。在开了 linger 的 Linux 上，`nohup` 后台和 systemd 用户服务里都实测能读到配置（当时该用户有登录会话）；机器重启后没人登录过、以及 cron 里能不能读到，还没有验证过。读取失败时 `run.py` 会以非零状态退出并说明原因。
 
 ## 配置
 
@@ -199,6 +234,7 @@ python report.py --csv                  # 导出 data/runs.csv
 
 ```
 run.py                执行测试并入库
+loop.py               持续执行：每 2 小时调用一次 run.py
 report.py             从数据库生成 report.html
 template.html         报告页面模板
 questions.json        题库
