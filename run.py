@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 DB_PATH = Path(os.environ.get("MI_DB") or ROOT / "data" / "results.db")   # MI_DB：测试时指到别处，不碰正式数据
 SECRET_CONFIG = "secret://model-inspect"
-DEFAULTS = {"protocol": "", "concurrency": 8, "timeout": 180, "budget": 600, "max_tokens": 8192,
+DEFAULTS = {"protocol": "", "concurrency": 2, "timeout": 180, "budget": 600, "max_tokens": 8192,
             "rpm": 0, "stream": True, "retries": 4, "rounds": 2, "params": {}}
 INCOMPLETE = 0.1                                     # 出错的题超过这个比例，这次执行算不完整，不计分（report.py 里有同一个值）
 CATS = {"trap": "陷阱题", "logic": "逻辑", "code": "代码", "knowledge": "学科", "sense": "常识陷阱", "compute": "精确计算"}
@@ -181,7 +181,7 @@ def read_stream(resp):
 
 
 class Limiter:
-    """一个账号（接口地址 + 密钥）一个：限制同时在途的请求数和每分钟请求数，遇到 429 自动降速，之后慢慢恢复。"""
+    """一个模型家族（接口地址 + 密钥 + 模型 ID）一个：限制同时在途的请求数和每分钟请求数，遇到 429 自动降速，之后慢慢恢复。"""
 
     def __init__(self, concurrency, rpm):
         self.limit = self.cap = concurrency          # cap 是配置的并发上限，limit 是当前实际用的
@@ -396,14 +396,14 @@ def run_model(m, questions, limiter, log=print):
     scored = len(rows) - len(answered) <= INCOMPLETE * len(rows)   # 出错太多就不计分：分数低是接口的问题，不是模型的
     cat_scores = {}
     for cat in CATS:
-        sub = [r for r in rows if r["cat"] == cat]
+        sub = [r for r in answered if r["cat"] == cat]
         if sub and scored:
             cat_scores[cat] = round(100 * sum(r["correct"] for r in sub) / len(sub), 1)
     return {
         "started_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(started)),
         "name": m["name"], "model": m["model"], "base_url": m["base_url"],
-        # 总分 = 全部题目的正确率；出错和超时的题按答错计
-        "score": round(100 * sum(r["correct"] for r in rows) / len(rows), 1) if scored else None,
+        # 总分 = 答上的题里的正确率；出错的题没有回答可判，不进分母
+        "score": round(100 * sum(r["correct"] for r in answered) / len(answered), 1) if scored else None,
         "cat_scores": cat_scores, "n_total": len(rows), "n_correct": sum(r["correct"] for r in rows),
         "n_error": len(rows) - len(answered), "duration_s": round(time.time() - started, 1),
         "avg_latency_s": round(sum(r["latency_s"] for r in answered) / len(answered), 2) if answered else 0,
@@ -452,6 +452,7 @@ def main():
     ap.add_argument("--smoke", action="store_true", help="每个模型只问 3 题验证连通，不入库")
     ap.add_argument("--budget", type=int, help="覆盖配置里的单模型总预算秒数（做一次性的完整测量时放宽）")
     ap.add_argument("--timeout", type=int, help="覆盖配置里的单题超时秒数")
+    ap.add_argument("--concurrency", type=int, help="覆盖配置里每个模型家族同时在途的请求数")
     ap.add_argument("--note", default="", help="给这次执行加备注（如“换了中转站”）")
     ap.add_argument("--no-report", action="store_true", help="跑完不重新生成 report.html")
     args = ap.parse_args()
@@ -459,6 +460,7 @@ def main():
     models = load_models(args)
     for m in models:
         m["budget"], m["timeout"] = args.budget or m["budget"], args.timeout or m["timeout"]
+        m["concurrency"] = args.concurrency or m["concurrency"]
     if args.list:
         for m in models:
             print(f"{m['name']:28} {m['model']:32} {m['base_url']}")
@@ -481,7 +483,7 @@ def main():
         with lock:
             cats = "  ".join(f"{CATS[c]} {v:.0f}" for c, v in run["cat_scores"].items())
             head = f"总分 {run['score']:.1f}" if run["score"] is not None else "不完整，本次不计分"
-            print(f"\n[{run['name']}] {head}  对 {run['n_correct']}/{run['n_total']}  "
+            print(f"\n[{run['name']}] {head}  对 {run['n_correct']}/{run['n_total'] - run['n_error']}  "
                   f"出错 {run['n_error']}  用时 {run['duration_s']:.0f}s  平均 {run['avg_latency_s']:.1f}s/题  "
                   f"输出 {run['tokens_out']} tokens" + (f"\n    {cats}" if cats else ""))
             if run["rounds"]:
@@ -504,21 +506,22 @@ def main():
                 for r in run["rows"]:
                     print(f"    {r['qid']}: 期望 {r['expected']} 得到 {r['got'] or r['error'][:80]}")
 
-    accounts = {}                                    # 同一账号（地址 + 密钥）的模型共用限速器并排队跑，不同账号之间并行
+    families = {}                                    # 同一家族（地址 + 密钥 + 模型 ID，即一个模型的各个档位）共用限速器并排队跑，不同家族之间并行
     for m in models:
-        accounts.setdefault((m["base_url"], m["api_key"]), []).append(m)
-    if len(accounts) < len(models):
-        print(f"同一账号下的模型依次执行（共 {len(accounts)} 个账号并行），每个模型各自有 {models[0]['budget']} 秒预算。")
+        families.setdefault((m["base_url"], m["api_key"], m["model"]), []).append(m)
+    if len(families) < len(models):
+        print(f"同一个模型的各档位依次执行、最多 {models[0]['concurrency']} 个并发请求，不同模型之间并行（共 {len(families)} 个）；"
+              f"每个档位各自有 {models[0]['budget']} 秒预算。")
 
-    def account(group):
+    def family(group):
         limiter = Limiter(group[0]["concurrency"], group[0]["rpm"])
         for m in group:
             limiter.cap = m["concurrency"]           # 之前被限流降下来的并发沿用到这个模型，之后再慢慢恢复
             limiter.limit = min(limiter.limit, limiter.cap) if limiter.hits else limiter.cap
             one(m, limiter)
 
-    with ThreadPoolExecutor(len(accounts)) as pool:
-        list(pool.map(account, accounts.values()))
+    with ThreadPoolExecutor(len(families)) as pool:
+        list(pool.map(family, families.values()))
     if db:
         db.close()
         if not args.no_report:

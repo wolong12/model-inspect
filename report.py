@@ -58,6 +58,12 @@ def collect():
         r["bits"] = "".join(
             "-" if q["id"] not in rows else "e" if rows[q["id"]]["error"] else str(rows[q["id"]]["correct"])
             for q in questions)
+        ok = [a for a in rows.values() if not a["error"]]
+        if r["score"] is not None and len(ok) < len(rows):   # 出错的题不计分；旧记录入库时是按答错算的，这里按答上的题重算
+            r["cat_scores"] = {c: round(100 * sum(a["correct"] for a in sub) / len(sub), 1)
+                               for c in CATS for sub in [[a for a in ok if a["cat"] == c]] if sub}
+            r["score"] = (round(sum(r["cat_scores"].values()) / len(r["cat_scores"]), 1) if r["suite"] == "v1"   # v1 的总分是各类别的平均
+                          else round(100 * sum(a["correct"] for a in ok) / len(ok), 1))
         if latest.get(r["name"]) == r["id"]:
             details[r["id"]] = {qid: {"got": a["got"], "error": a["error"], "reply": a["reply"][-1500:],
                                       "latency_s": a["latency_s"]} for qid, a in rows.items()}
